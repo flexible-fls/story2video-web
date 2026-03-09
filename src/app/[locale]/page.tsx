@@ -123,49 +123,112 @@ export default function LocalizedHome() {
     },
   ];
 
-  const steps = locale === "zh"
-    ? [
-        "上传标准剧本",
-        "系统解析项目与角色",
-        "生成分镜、标题、文案",
-        "进入结果页与视频预览",
-      ]
-    : [
-        "Upload your standard script",
-        "Parse project structure and characters",
-        "Generate storyboard, titles, and copy",
-        "View result page and video preview",
-      ];
+  const steps =
+    locale === "zh"
+      ? [
+          "上传标准剧本",
+          "系统解析项目与角色",
+          "生成分镜、标题、文案",
+          "进入结果页与视频预览",
+        ]
+      : [
+          "Upload your standard script",
+          "Parse project structure and characters",
+          "Generate storyboard, titles, and copy",
+          "View result page and video preview",
+        ];
 
-  const faqs = locale === "zh"
-    ? [
-        {
-          q: "支持哪些剧本格式？",
-          a: "当前支持 txt / md / doc / docx / pdf，测试阶段建议优先使用 txt。",
-        },
-        {
-          q: "适合真人短剧还是漫剧？",
-          a: "两者都支持，当前原型更偏向短剧生产结构，后续可扩展到漫剧和视频生成。",
-        },
-        {
-          q: "现在已经接入真实视频生成了吗？",
-          a: "当前是结构化原型版本，已完成上传、解析、结果展示与预览流程，后续可对接 Runway、Pika 等能力。",
-        },
-      ]
-    : [
-        {
-          q: "What script formats are supported?",
-          a: "Currently supports txt / md / doc / docx / pdf. For testing, txt is recommended.",
-        },
-        {
-          q: "Is it for live-action short dramas or comic dramas?",
-          a: "Both. The current prototype focuses more on short drama production structure, but can expand to comic and video generation.",
-        },
-        {
-          q: "Does it generate real videos yet?",
-          a: "This is currently a structured production prototype with upload, parsing, results, and preview flow. Real video generation can be connected later.",
-        },
-      ];
+  const faqs =
+    locale === "zh"
+      ? [
+          {
+            q: "支持哪些剧本格式？",
+            a: "当前支持 txt / md / doc / docx / pdf，测试阶段建议优先使用 txt。",
+          },
+          {
+            q: "适合真人短剧还是漫剧？",
+            a: "两者都支持，当前原型更偏向短剧生产结构，后续可扩展到漫剧和视频生成。",
+          },
+          {
+            q: "现在已经接入真实视频生成了吗？",
+            a: "当前是结构化原型版本，已完成上传、解析、结果展示与预览流程，后续可对接 Runway、Pika 等能力。",
+          },
+        ]
+      : [
+          {
+            q: "What script formats are supported?",
+            a: "Currently supports txt / md / doc / docx / pdf. For testing, txt is recommended.",
+          },
+          {
+            q: "Is it for live-action short dramas or comic dramas?",
+            a: "Both. The current prototype focuses more on short drama production structure, but can expand to comic and video generation.",
+          },
+          {
+            q: "Does it generate real videos yet?",
+            a: "This is currently a structured production prototype with upload, parsing, results, and preview flow. Real video generation can be connected later.",
+          },
+        ];
+
+  const pricing =
+    locale === "zh"
+      ? [
+          {
+            name: "Free",
+            price: "¥0",
+            period: "/月",
+            desc: "适合测试与体验",
+            features: ["每月 5 个剧本", "基础分镜解析", "AI 标题生成", "结果页预览"],
+            button: "立即开始",
+            highlight: false,
+          },
+          {
+            name: "Pro",
+            price: "¥99",
+            period: "/月",
+            desc: "适合个人创作者",
+            features: ["每月 50 个剧本", "高级角色识别", "封面文案与爆点文案", "视频预览工作流"],
+            button: "升级 Pro",
+            highlight: true,
+          },
+          {
+            name: "Studio",
+            price: "¥399",
+            period: "/月",
+            desc: "适合团队生产",
+            features: ["无限剧本处理", "团队协作能力", "后续可接 API", "优先支持与商用扩展"],
+            button: "联系商务",
+            highlight: false,
+          },
+        ]
+      : [
+          {
+            name: "Free",
+            price: "$0",
+            period: "/month",
+            desc: "Best for testing",
+            features: ["5 scripts / month", "Basic storyboard parsing", "AI title generation", "Result page preview"],
+            button: "Start Free",
+            highlight: false,
+          },
+          {
+            name: "Pro",
+            price: "$19",
+            period: "/month",
+            desc: "Best for creators",
+            features: ["50 scripts / month", "Advanced character extraction", "Hook and cover copy", "Video preview workflow"],
+            button: "Upgrade Pro",
+            highlight: true,
+          },
+          {
+            name: "Studio",
+            price: "$79",
+            period: "/month",
+            desc: "Best for teams",
+            features: ["Unlimited script processing", "Team collaboration", "Future API access", "Priority support & commercial scaling"],
+            button: "Contact Sales",
+            highlight: false,
+          },
+        ];
 
   return (
     <main className="min-h-screen bg-zinc-950 text-white">
@@ -258,9 +321,7 @@ export default function LocalizedHome() {
               </div>
             )}
 
-            {message && (
-              <div className="mt-4 text-sm text-emerald-400">{message}</div>
-            )}
+            {message && <div className="mt-4 text-sm text-emerald-400">{message}</div>}
 
             <button
               onClick={handleUpload}
@@ -315,10 +376,7 @@ export default function LocalizedHome() {
 
             <div className="mt-6 space-y-4">
               {steps.map((step, index) => (
-                <div
-                  key={step}
-                  className="flex items-center gap-4 rounded-2xl bg-zinc-950 p-4"
-                >
+                <div key={step} className="flex items-center gap-4 rounded-2xl bg-zinc-950 p-4">
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-400 text-sm font-bold text-black">
                     {index + 1}
                   </div>
@@ -375,6 +433,67 @@ export default function LocalizedHome() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-7xl px-6 py-6">
+        <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6">
+          <div className="text-2xl font-semibold">
+            {locale === "zh" ? "价格方案" : "Pricing"}
+          </div>
+          <div className="mt-2 text-zinc-400">
+            {locale === "zh"
+              ? "为个人创作者、工作室与团队准备的不同使用方案。"
+              : "Flexible plans for creators, studios, and production teams."}
+          </div>
+
+          <div className="mt-8 grid gap-6 lg:grid-cols-3">
+            {pricing.map((plan) => (
+              <div
+                key={plan.name}
+                className={`rounded-3xl border p-6 ${
+                  plan.highlight
+                    ? "border-emerald-400 bg-zinc-950 shadow-lg shadow-emerald-400/10"
+                    : "border-white/10 bg-zinc-950"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="text-xl font-semibold">{plan.name}</div>
+                  {plan.highlight && (
+                    <div className="rounded-full bg-emerald-400 px-3 py-1 text-xs font-medium text-black">
+                      {locale === "zh" ? "推荐" : "Popular"}
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-4 flex items-end gap-1">
+                  <span className="text-4xl font-bold">{plan.price}</span>
+                  <span className="pb-1 text-sm text-zinc-400">{plan.period}</span>
+                </div>
+
+                <div className="mt-3 text-sm text-zinc-400">{plan.desc}</div>
+
+                <div className="mt-6 space-y-3">
+                  {plan.features.map((feature) => (
+                    <div key={feature} className="flex items-center gap-3 text-sm text-zinc-300">
+                      <span className="inline-block h-2 w-2 rounded-full bg-emerald-400" />
+                      <span>{feature}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  className={`mt-8 w-full rounded-xl py-3 text-sm font-semibold transition ${
+                    plan.highlight
+                      ? "bg-emerald-400 text-black hover:opacity-90"
+                      : "bg-white/10 text-white hover:bg-white/15"
+                  }`}
+                >
+                  {plan.button}
+                </button>
+              </div>
+            ))}
           </div>
         </div>
       </section>
