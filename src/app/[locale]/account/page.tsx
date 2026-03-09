@@ -72,23 +72,16 @@ export default function AccountPage() {
 
   const planLabel = useMemo(() => {
     const currentPlan = profile?.plan || "free";
-
-    if (currentPlan === "studio") {
-      return "Studio";
-    }
-    if (currentPlan === "pro") {
-      return "Pro";
-    }
+    if (currentPlan === "studio") return "Studio";
+    if (currentPlan === "pro") return "Pro";
     return "Free";
   }, [profile]);
 
   const quotaLabel = useMemo(() => {
     const currentPlan = profile?.plan || "free";
-
     if (currentPlan === "studio") {
       return isZh ? "无限" : "Unlimited";
     }
-
     return `${profile?.used_count ?? 0} / ${profile?.monthly_quota ?? 5}`;
   }, [profile, isZh]);
 
@@ -144,8 +137,8 @@ export default function AccountPage() {
 
           <p className="mt-3 text-zinc-400">
             {isZh
-              ? "这里会显示当前套餐、额度消耗与账户状态。"
-              : "This page shows your current plan, quota usage, and account status."}
+              ? "这里会显示当前套餐、额度消耗、账户状态和订单入口。"
+              : "This page shows your current plan, quota usage, account status, and order entry."}
           </p>
         </div>
 
@@ -202,6 +195,13 @@ export default function AccountPage() {
                 className="block rounded-xl border border-white/10 px-4 py-3 text-center text-sm text-zinc-200"
               >
                 {isZh ? "升级套餐" : "Upgrade Plan"}
+              </Link>
+
+              <Link
+                href={`/${locale}/orders`}
+                className="block rounded-xl border border-white/10 px-4 py-3 text-center text-sm text-zinc-200"
+              >
+                {isZh ? "订单记录" : "Order History"}
               </Link>
 
               <button
