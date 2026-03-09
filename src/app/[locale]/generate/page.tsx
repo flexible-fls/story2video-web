@@ -1,3 +1,4 @@
+import Link from "next/link";
 type PageProps = {
   params: Promise<{
     locale: "zh" | "en";
@@ -94,6 +95,20 @@ export default async function GeneratePage({ params }: PageProps) {
               ? "提示：这是当前的演示版进度页。下一步我们会接入真实的剧本上传与任务处理逻辑。"
               : "Tip: This is the current demo progress page. Next we will connect real script upload and task processing logic."}
           </div>
+          <div className="mt-8 rounded-xl bg-zinc-800 p-4 text-sm text-zinc-300">
+  {isZh
+    ? "提示：这是当前的演示版进度页。下一步我们会接入真实的剧本上传与任务处理逻辑。"
+    : "Tip: This is the current demo progress page. Next we will connect real script upload and task processing logic."}
+</div>
+
+<div className="mt-6">
+  <Link
+    href={`/${locale}/result`}
+    className="inline-block rounded-xl bg-white px-5 py-3 text-sm font-medium text-black"
+  >
+    {isZh ? "查看结果页" : "View Result Page"}
+  </Link>
+</div>
         </div>
       </section>
     </main>
