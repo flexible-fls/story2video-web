@@ -16,11 +16,13 @@ export default function ResultPage() {
   const [storyboard, setStoryboard] = useState<StoryboardItem[]>([]);
   const [summary, setSummary] = useState("");
   const [title, setTitle] = useState("");
+  const [aiTitle, setAiTitle] = useState("");
   const [projectType, setProjectType] = useState("");
   const [genre, setGenre] = useState("");
   const [spec, setSpec] = useState("");
   const [highlight, setHighlight] = useState("");
   const [hook, setHook] = useState("");
+  const [coverCopy, setCoverCopy] = useState<string[]>([]);
 
   useEffect(() => {
     const path = window.location.pathname;
@@ -32,6 +34,9 @@ export default function ResultPage() {
 
     const savedTitle = localStorage.getItem("parsedTitle");
     if (savedTitle) setTitle(savedTitle);
+
+    const savedAiTitle = localStorage.getItem("parsedAiTitle");
+    if (savedAiTitle) setAiTitle(savedAiTitle);
 
     const savedProjectType = localStorage.getItem("parsedProjectType");
     if (savedProjectType) setProjectType(savedProjectType);
@@ -56,6 +61,9 @@ export default function ResultPage() {
 
     const savedStoryboard = localStorage.getItem("parsedStoryboard");
     if (savedStoryboard) setStoryboard(JSON.parse(savedStoryboard));
+
+    const savedCoverCopy = localStorage.getItem("parsedCoverCopy");
+    if (savedCoverCopy) setCoverCopy(JSON.parse(savedCoverCopy));
   }, []);
 
   const isZh = locale === "zh";
@@ -105,6 +113,11 @@ export default function ResultPage() {
               </div>
 
               <div className="rounded-xl bg-zinc-950 p-4">
+                <div className="text-sm text-zinc-400">{isZh ? "AI生成标题" : "AI Title"}</div>
+                <div className="mt-2 font-medium">{aiTitle || (isZh ? "未生成" : "Not generated")}</div>
+              </div>
+
+              <div className="rounded-xl bg-zinc-950 p-4">
                 <div className="text-sm text-zinc-400">{isZh ? "项目类型" : "Project Type"}</div>
                 <div className="mt-2 font-medium">{projectType || (isZh ? "未识别" : "Not detected")}</div>
               </div>
@@ -117,6 +130,11 @@ export default function ResultPage() {
               <div className="rounded-xl bg-zinc-950 p-4">
                 <div className="text-sm text-zinc-400">{isZh ? "规格" : "Spec"}</div>
                 <div className="mt-2 font-medium">{spec || (isZh ? "未识别" : "Not detected")}</div>
+              </div>
+
+              <div className="rounded-xl bg-zinc-950 p-4">
+                <div className="text-sm text-zinc-400">{isZh ? "题材亮点" : "Highlight"}</div>
+                <div className="mt-2 font-medium">{highlight || (isZh ? "未识别" : "Not detected")}</div>
               </div>
             </div>
           </div>
@@ -140,12 +158,33 @@ export default function ResultPage() {
           </div>
         </div>
 
-        <div className="mt-6 rounded-2xl border border-white/10 bg-zinc-900 p-6">
-          <h2 className="text-lg font-semibold">
-            {isZh ? "爆点文案" : "Hook Line"}
-          </h2>
-          <div className="mt-4 rounded-xl bg-zinc-950 p-4 text-zinc-200">
-            {hook || (isZh ? "暂无爆点文案" : "No hook line")}
+        <div className="mt-6 grid gap-6 lg:grid-cols-2">
+          <div className="rounded-2xl border border-white/10 bg-zinc-900 p-6">
+            <h2 className="text-lg font-semibold">
+              {isZh ? "爆点文案" : "Hook Line"}
+            </h2>
+            <div className="mt-4 rounded-xl bg-zinc-950 p-4 text-zinc-200">
+              {hook || (isZh ? "暂无爆点文案" : "No hook line")}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-zinc-900 p-6">
+            <h2 className="text-lg font-semibold">
+              {isZh ? "封面文案建议" : "Cover Copy Suggestions"}
+            </h2>
+            <div className="mt-4 space-y-3">
+              {coverCopy.length > 0 ? (
+                coverCopy.map((item, index) => (
+                  <div key={index} className="rounded-xl bg-zinc-950 p-4 text-sm text-zinc-300">
+                    {item}
+                  </div>
+                ))
+              ) : (
+                <div className="rounded-xl bg-zinc-950 p-4 text-sm text-zinc-400">
+                  {isZh ? "暂无封面文案" : "No cover copy"}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

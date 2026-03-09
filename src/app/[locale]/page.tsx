@@ -51,17 +51,20 @@ export default function LocalizedHome() {
 
         const parsed = await parseRes.json();
 
-        if (parsed.success) {
-          localStorage.setItem("parsedTitle", parsed.title || "");
-          localStorage.setItem("parsedProjectType", parsed.projectType || "");
-          localStorage.setItem("parsedGenre", parsed.genre || "");
-          localStorage.setItem("parsedSpec", parsed.spec || "");
-          localStorage.setItem("parsedHighlight", parsed.highlight || "");
-          localStorage.setItem("parsedSummary", parsed.summary || "");
-          localStorage.setItem("parsedHook", parsed.hook || "");
-          localStorage.setItem("parsedCharacters", JSON.stringify(parsed.characters || []));
-          localStorage.setItem("parsedStoryboard", JSON.stringify(parsed.storyboard || []));
-        }
+      if (parsed.success) {
+  localStorage.setItem("parsedTitle", parsed.title || "");
+  localStorage.setItem("parsedAiTitle", parsed.aiTitle || "");
+  localStorage.setItem("parsedProjectType", parsed.projectType || "");
+  localStorage.setItem("parsedGenre", parsed.genre || "");
+  localStorage.setItem("parsedSpec", parsed.spec || "");
+  localStorage.setItem("parsedHighlight", parsed.highlight || "");
+  localStorage.setItem("parsedSummary", parsed.summary || "");
+  localStorage.setItem("parsedHook", parsed.hook || "");
+  localStorage.setItem("parsedCoverCopy", JSON.stringify(parsed.coverCopy || []));
+  localStorage.setItem("parsedCharacters", JSON.stringify(parsed.characters || []));
+  localStorage.setItem("parsedStoryboard", JSON.stringify(parsed.storyboard || []));
+}
+
 
         setMessage(
           locale === "zh"
