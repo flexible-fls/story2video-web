@@ -70,8 +70,8 @@ export default function LocalizedHome() {
         );
 
         setTimeout(() => {
-          router.push(`/${locale}/result`);
-        }, 700);
+          router.push(`/${locale}/generate`);
+        }, 500);
       } else {
         setMessage(
           locale === "zh"
