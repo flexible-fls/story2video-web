@@ -26,6 +26,13 @@ export default function AccountPage() {
   const [profile, setProfile] = useState<ProfileRow | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const adminEmails = (process.env.NEXT_PUBLIC_ADMIN_EMAILS || "")
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+
+  const isAdmin = email ? adminEmails.includes(email.toLowerCase()) : false;
+
   useEffect(() => {
     async function loadUserAndProfile() {
       const {
@@ -210,6 +217,15 @@ export default function AccountPage() {
               >
                 {isZh ? "生成记录" : "Generation History"}
               </Link>
+
+              {isAdmin && (
+                <Link
+                  href={`/${locale}/admin`}
+                  className="block rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-center text-sm text-emerald-300"
+                >
+                  {isZh ? "管理员后台" : "Admin Dashboard"}
+                </Link>
+              )}
 
               <button
                 onClick={handleLogout}
