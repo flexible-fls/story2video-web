@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 type StoryboardItem = {
   shot: number;
@@ -9,7 +10,28 @@ type StoryboardItem = {
   desc: string;
 };
 
+function clearProjectCache() {
+  const keys = [
+    "scriptText",
+    "parsedTitle",
+    "parsedAiTitle",
+    "parsedProjectType",
+    "parsedGenre",
+    "parsedSpec",
+    "parsedHighlight",
+    "parsedSummary",
+    "parsedHook",
+    "parsedCoverCopy",
+    "parsedCharacters",
+    "parsedStoryboard",
+  ];
+
+  keys.forEach((key) => localStorage.removeItem(key));
+}
+
 export default function ResultPage() {
+  const router = useRouter();
+
   const [script, setScript] = useState("");
   const [locale, setLocale] = useState<"zh" | "en">("zh");
   const [characters, setCharacters] = useState<string[]>([]);
@@ -67,6 +89,11 @@ export default function ResultPage() {
   }, []);
 
   const isZh = locale === "zh";
+
+  function handleRegenerate() {
+    clearProjectCache();
+    router.push(`/${locale}`);
+  }
 
   return (
     <main className="min-h-screen bg-zinc-950 text-white">
@@ -262,12 +289,12 @@ export default function ResultPage() {
               {isZh ? "返回首页" : "Back Home"}
             </Link>
 
-            <Link
-              href={`/${locale}`}
+            <button
+              onClick={handleRegenerate}
               className="rounded-xl bg-white px-5 py-3 text-black"
             >
               {isZh ? "重新生成" : "Generate Again"}
-            </Link>
+            </button>
           </div>
         </div>
       </section>
