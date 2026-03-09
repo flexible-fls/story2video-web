@@ -37,14 +37,17 @@ export default async function LocalizedHome({ params }: PageProps) {
         <p className="mb-10 text-zinc-400">{t.heroDesc}</p>
 
         <div className="rounded-xl bg-zinc-900 p-6">
-          <label className="mb-2 block">{t.uploadLabel}</label>
+  <label className="mb-2 block">{t.uploadLabel}</label>
 
-          <input type="file" className="mb-4" />
+  <input type="file" className="mb-4" />
 
-          <button className="rounded-lg bg-emerald-400 px-6 py-2 text-black">
-            {t.generateButton}
-          </button>
-        </div>
+  <Link
+    href={`/${locale}/generate`}
+    className="inline-block rounded-lg bg-emerald-400 px-6 py-2 text-black"
+  >
+    {t.generateButton}
+  </Link>
+</div>
       </section>
 
       <footer className="py-6 text-center text-zinc-500">{t.footer}</footer>
