@@ -18,6 +18,16 @@ type PricingPlan = {
   highlight: boolean;
 };
 
+type ProfileRow = {
+  id: string;
+  email: string | null;
+  plan: string;
+  monthly_quota: number;
+  used_count: number;
+  status: string;
+  updated_at: string;
+};
+
 export default function LocalizedHome() {
   const pathname = usePathname();
   const router = useRouter();
@@ -29,22 +39,62 @@ export default function LocalizedHome() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [profile, setProfile] = useState<ProfileRow | null>(null);
 
   useEffect(() => {
-    async function loadUser() {
+    async function loadUserAndProfile() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
 
       setUserEmail(user?.email ?? null);
+
+      if (!user) {
+        setProfile(null);
+        return;
+      }
+
+      const { data } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
+        .single();
+
+      if (data) {
+        setProfile(data as ProfileRow);
+      } else {
+        setProfile({
+          id: user.id,
+          email: user.email || "",
+          plan: "free",
+          monthly_quota: 5,
+          used_count: 0,
+          status: "active",
+          updated_at: new Date().toISOString(),
+        });
+      }
     }
 
-    loadUser();
+    loadUserAndProfile();
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setUserEmail(session?.user?.email ?? null);
+
+      if (session?.user) {
+        const { data } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", session.user.id)
+          .single();
+
+        if (data) {
+          setProfile(data as ProfileRow);
+        }
+      } else {
+        setProfile(null);
+      }
     });
 
     return () => {
@@ -59,9 +109,87 @@ export default function LocalizedHome() {
     }
 
     setLoading(true);
-    setMessage(locale === "zh" ? "上传中..." : "Uploading...");
+    setMessage(locale === "zh" ? "正在检查额度..." : "Checking quota...");
 
     try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        setMessage(locale === "zh" ? "请先登录后再生成" : "Please sign in before generating");
+        setLoading(false);
+        return;
+      }
+
+      let currentProfile = profile;
+
+      if (!currentProfile) {
+        const { data } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", user.id)
+          .single();
+
+        if (data) {
+          currentProfile = data as ProfileRow;
+          setProfile(currentProfile);
+        }
+      }
+
+      const currentPlan = currentProfile?.plan || "free";
+      const currentQuota =
+        currentPlan === "studio" ? 999999 : currentProfile?.monthly_quota ?? 5;
+      const usedCount = currentProfile?.used_count ?? 0;
+
+      if (currentPlan !== "studio" && usedCount >= currentQuota) {
+        setMessage(
+          locale === "zh"
+            ? "本月额度已用完，请升级套餐后继续使用"
+            : "Your monthly quota has been used up. Please upgrade your plan to continue."
+        );
+        setLoading(false);
+        return;
+      }
+
+      const nextUsedCount = currentPlan === "studio" ? usedCount : usedCount + 1;
+
+      const { error: updateError } = await supabase.from("profiles").upsert(
+        {
+          id: user.id,
+          email: user.email || "",
+          plan: currentPlan,
+          monthly_quota: currentPlan === "studio" ? 999999 : currentQuota,
+          used_count: nextUsedCount,
+          status: "active",
+          updated_at: new Date().toISOString(),
+        },
+        {
+          onConflict: "id",
+        }
+      );
+
+      if (updateError) {
+        setMessage(
+          locale === "zh"
+            ? `额度扣减失败：${updateError.message}`
+            : `Failed to deduct quota: ${updateError.message}`
+        );
+        setLoading(false);
+        return;
+      }
+
+      setProfile((prev) =>
+        prev
+          ? {
+              ...prev,
+              used_count: nextUsedCount,
+            }
+          : null
+      );
+
+      setMessage(locale === "zh" ? "上传中..." : "Uploading...");
+
       const formData = new FormData();
       formData.append("file", file);
 
@@ -187,7 +315,7 @@ export default function LocalizedHome() {
           },
           {
             q: "现在已经接入真实视频生成了吗？",
-            a: "当前是结构化原型版本，已完成上传、解析、结果展示与预览流程，后续可对接 Runway、Pika 等能力。",
+            a: "当前是结构化原型版本，已完成上传、解析、结果展示与预览流程，后续可对接更多能力。",
           },
         ]
       : [
@@ -201,7 +329,7 @@ export default function LocalizedHome() {
           },
           {
             q: "Does it generate real videos yet?",
-            a: "This is currently a structured production prototype with upload, parsing, results, and preview flow. Real video generation can be connected later.",
+            a: "This is currently a structured production prototype with upload, parsing, results, and preview flow. More generation capabilities can be connected later.",
           },
         ];
 
@@ -272,6 +400,16 @@ export default function LocalizedHome() {
           },
         ];
 
+  const currentPlanLabel =
+    profile?.plan === "studio" ? "Studio" : profile?.plan === "pro" ? "Pro" : "Free";
+
+  const quotaText =
+    profile?.plan === "studio"
+      ? locale === "zh"
+        ? "无限"
+        : "Unlimited"
+      : `${profile?.used_count ?? 0} / ${profile?.monthly_quota ?? 5}`;
+
   return (
     <main className="min-h-screen bg-zinc-950 text-white">
       <header className="sticky top-0 z-30 border-b border-white/10 bg-zinc-950/80 backdrop-blur">
@@ -337,6 +475,17 @@ export default function LocalizedHome() {
                 ? "FulushouVideo 面向真人短剧与漫剧团队，帮助你把原始剧本快速转成角色、分镜、项目摘要、标题文案和可视化结果页。"
                 : "FulushouVideo helps live-action and comic drama teams transform raw scripts into characters, storyboard, summaries, titles, copywriting, and visual production outputs."}
             </p>
+
+            {userEmail && (
+              <div className="mt-6 flex flex-wrap gap-3">
+                <div className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-4 py-2 text-sm text-emerald-300">
+                  {locale === "zh" ? `当前套餐：${currentPlanLabel}` : `Current Plan: ${currentPlanLabel}`}
+                </div>
+                <div className="rounded-full border border-white/10 bg-zinc-900 px-4 py-2 text-sm text-zinc-300">
+                  {locale === "zh" ? `本月额度：${quotaText}` : `Quota: ${quotaText}`}
+                </div>
+              </div>
+            )}
 
             <div className="mt-8 flex flex-wrap gap-3 text-sm text-zinc-300">
               <div className="rounded-full border border-white/10 bg-zinc-900 px-4 py-2">
@@ -409,6 +558,14 @@ export default function LocalizedHome() {
                   : "Processing..."
                 : t.generateButton}
             </button>
+
+            {userEmail && profile?.plan !== "studio" && (
+              <div className="mt-4 text-xs text-zinc-500">
+                {locale === "zh"
+                  ? `已使用 ${profile?.used_count ?? 0} / ${profile?.monthly_quota ?? 5} 次`
+                  : `Used ${profile?.used_count ?? 0} / ${profile?.monthly_quota ?? 5}`}
+              </div>
+            )}
           </div>
         </div>
       </section>
