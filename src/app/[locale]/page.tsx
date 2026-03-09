@@ -24,7 +24,7 @@ export default async function LocalizedHome({ params }: PageProps) {
       <header className="border-b border-white/10 bg-zinc-950/80 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
           <div>
-            <div className="text-xl font-semibold tracking-tight">Story2Video</div>
+            <div className="text-xl font-semibold tracking-tight">FulushouVideo</div>
             <div className="text-xs text-zinc-400">{t.headerSubtitle}</div>
           </div>
           <LanguageSwitch locale={locale} />

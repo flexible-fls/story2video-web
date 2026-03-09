@@ -15,7 +15,7 @@ const zh: Dict = {
   heroDesc: "上传剧本，自动解析剧情、人物与场景，生成可执行的视频生产方案。",
   uploadLabel: "上传剧本",
   generateButton: "开始生成",
-  footer: "Story2Video · AI 剧本视频生成平台",
+  footer: "FulushouVideo · AI 剧本视频生成平台",
 };
 
 const en: Dict = {
@@ -24,7 +24,7 @@ const en: Dict = {
   heroDesc: "Upload scripts, automatically parse story, characters, and scenes, and generate production-ready video plans.",
   uploadLabel: "Upload Script",
   generateButton: "Generate",
-  footer: "Story2Video · AI Script-to-Video Platform",
+  footer: "FulushouVideo · AI Script-to-Video Platform",
 };
 
 export function getDictionary(locale: Locale): Dict {

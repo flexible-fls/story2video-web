@@ -2,8 +2,8 @@ import "./globals.css";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Story2Video",
-  description: "AI Drama & Comic Video Studio",
+  title: "FulushouVideo",
+  description: "FulushouVideo AI Drama & Comic Video Studio",
 };
 
 export default function RootLayout({
