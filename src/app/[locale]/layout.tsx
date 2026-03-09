@@ -1,11 +1,9 @@
 import type { Metadata } from "next";
 
-type Locale = "zh" | "en";
-
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ locale: Locale }>;
+  params: Promise<{ locale: string }>;
 }): Promise<Metadata> {
   const { locale } = await params;
 
@@ -82,11 +80,10 @@ export async function generateMetadata({
   };
 }
 
-export default async function LocaleLayout({
+export default function LocaleLayout({
   children,
 }: {
   children: React.ReactNode;
-  params: Promise<{ locale: Locale }>;
 }) {
   return <>{children}</>;
 }
