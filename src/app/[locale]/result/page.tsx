@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type StoryboardItem = {
@@ -90,6 +90,28 @@ export default function ResultPage() {
 
   const isZh = locale === "zh";
 
+  const stats = useMemo(() => {
+    const scriptLength = script.trim().length;
+    return [
+      {
+        label: isZh ? "识别角色数" : "Characters",
+        value: characters.length,
+      },
+      {
+        label: isZh ? "分镜条数" : "Storyboard Shots",
+        value: storyboard.length,
+      },
+      {
+        label: isZh ? "文案条数" : "Copy Items",
+        value: coverCopy.length,
+      },
+      {
+        label: isZh ? "剧本字数" : "Script Length",
+        value: scriptLength,
+      },
+    ];
+  }, [isZh, characters.length, storyboard.length, coverCopy.length, script]);
+
   function handleRegenerate() {
     clearProjectCache();
     router.push(`/${locale}`);
@@ -127,7 +149,19 @@ export default function ResultPage() {
           </p>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {stats.map((item) => (
+            <div
+              key={item.label}
+              className="rounded-2xl border border-white/10 bg-zinc-900 p-5"
+            >
+              <div className="text-sm text-zinc-400">{item.label}</div>
+              <div className="mt-3 text-3xl font-semibold">{item.value}</div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-6 grid gap-6 lg:grid-cols-3">
           <div className="rounded-2xl border border-white/10 bg-zinc-900 p-6 lg:col-span-2">
             <h2 className="text-lg font-semibold">
               {isZh ? "项目信息" : "Project Information"}
