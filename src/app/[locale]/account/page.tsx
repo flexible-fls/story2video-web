@@ -137,8 +137,8 @@ export default function AccountPage() {
 
           <p className="mt-3 text-zinc-400">
             {isZh
-              ? "这里会显示当前套餐、额度消耗、账户状态和订单入口。"
-              : "This page shows your current plan, quota usage, account status, and order entry."}
+              ? "这里会显示当前套餐、额度消耗、账户状态和数据入口。"
+              : "This page shows your current plan, quota usage, account status, and data entry points."}
           </p>
         </div>
 
@@ -202,6 +202,13 @@ export default function AccountPage() {
                 className="block rounded-xl border border-white/10 px-4 py-3 text-center text-sm text-zinc-200"
               >
                 {isZh ? "订单记录" : "Order History"}
+              </Link>
+
+              <Link
+                href={`/${locale}/history`}
+                className="block rounded-xl border border-white/10 px-4 py-3 text-center text-sm text-zinc-200"
+              >
+                {isZh ? "生成记录" : "Generation History"}
               </Link>
 
               <button

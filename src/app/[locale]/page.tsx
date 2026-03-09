@@ -179,6 +179,25 @@ export default function LocalizedHome() {
         return;
       }
 
+      const { error: generationError } = await supabase.from("generations").insert({
+        user_id: user.id,
+        email: user.email || "",
+        file_name: file.name,
+        plan: currentPlan,
+        quota_cost: currentPlan === "studio" ? 0 : 1,
+        status: "completed",
+      });
+
+      if (generationError) {
+        setMessage(
+          locale === "zh"
+            ? `生成记录写入失败：${generationError.message}`
+            : `Failed to save generation record: ${generationError.message}`
+        );
+        setLoading(false);
+        return;
+      }
+
       setProfile((prev) =>
         prev
           ? {
