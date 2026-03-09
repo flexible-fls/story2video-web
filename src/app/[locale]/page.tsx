@@ -7,6 +7,17 @@ import { getDictionary } from "@/lib/dictionary";
 import LanguageSwitch from "@/components/LanguageSwitch";
 import { supabase } from "@/lib/supabase";
 
+type PricingPlan = {
+  name: string;
+  price: string;
+  period: string;
+  desc: string;
+  features: string[];
+  button: string;
+  href: string;
+  highlight: boolean;
+};
+
 export default function LocalizedHome() {
   const pathname = usePathname();
   const router = useRouter();
@@ -194,7 +205,7 @@ export default function LocalizedHome() {
           },
         ];
 
-  const pricing =
+  const pricing: PricingPlan[] =
     locale === "zh"
       ? [
           {
@@ -204,6 +215,7 @@ export default function LocalizedHome() {
             desc: "适合测试与体验",
             features: ["每月 5 个剧本", "基础分镜解析", "AI 标题生成", "结果页预览"],
             button: "立即开始",
+            href: `/${locale}/auth`,
             highlight: false,
           },
           {
@@ -213,6 +225,7 @@ export default function LocalizedHome() {
             desc: "适合个人创作者",
             features: ["每月 50 个剧本", "高级角色识别", "封面文案与爆点文案", "视频预览工作流"],
             button: "升级 Pro",
+            href: `/${locale}/billing`,
             highlight: true,
           },
           {
@@ -222,6 +235,7 @@ export default function LocalizedHome() {
             desc: "适合团队生产",
             features: ["无限剧本处理", "团队协作能力", "后续可接 API", "优先支持与商用扩展"],
             button: "联系商务",
+            href: `/${locale}/contact`,
             highlight: false,
           },
         ]
@@ -233,6 +247,7 @@ export default function LocalizedHome() {
             desc: "Best for testing",
             features: ["5 scripts / month", "Basic storyboard parsing", "AI title generation", "Result page preview"],
             button: "Start Free",
+            href: `/${locale}/auth`,
             highlight: false,
           },
           {
@@ -242,6 +257,7 @@ export default function LocalizedHome() {
             desc: "Best for creators",
             features: ["50 scripts / month", "Advanced character extraction", "Hook and cover copy", "Video preview workflow"],
             button: "Upgrade Pro",
+            href: `/${locale}/billing`,
             highlight: true,
           },
           {
@@ -251,6 +267,7 @@ export default function LocalizedHome() {
             desc: "Best for teams",
             features: ["Unlimited script processing", "Team collaboration", "Future API access", "Priority support & commercial scaling"],
             button: "Contact Sales",
+            href: `/${locale}/contact`,
             highlight: false,
           },
         ];
@@ -541,15 +558,16 @@ export default function LocalizedHome() {
                   ))}
                 </div>
 
-                <button
-                  className={`mt-8 w-full rounded-xl py-3 text-sm font-semibold transition ${
+                <Link
+                  href={plan.href}
+                  className={`mt-8 block w-full rounded-xl py-3 text-center text-sm font-semibold transition ${
                     plan.highlight
                       ? "bg-emerald-400 text-black hover:opacity-90"
                       : "bg-white/10 text-white hover:bg-white/15"
                   }`}
                 >
                   {plan.button}
-                </button>
+                </Link>
               </div>
             ))}
           </div>
