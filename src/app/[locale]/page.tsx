@@ -43,7 +43,7 @@ function getExampleScript(isZh: boolean) {
 林晚：你为什么现在才回来？
 顾沉：因为我终于查到了真相。
 林晚：真相？你让我等了三年，现在才来告诉我真相？
-旁白：一场误会，把两个人推向了命运的交叉口。
+旁白：一场误会，把两个人推向命运的交叉口。
 
 场景一：夜雨街头
 林晚站在路灯下，眼眶微红，顾沉撑伞走近。
@@ -145,11 +145,13 @@ export default function HomePage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [profile, setProfile] = useState<ProfileRow | null>(null);
+  const [isAuthed, setIsAuthed] = useState(false);
   const [scriptText, setScriptText] = useState("");
   const [loadedFileName, setLoadedFileName] = useState("");
   const [readingFile, setReadingFile] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [signingOut, setSigningOut] = useState(false);
 
   const stats = useMemo(() => getScriptStats(scriptText), [scriptText]);
 
@@ -166,7 +168,13 @@ export default function HomePage() {
       data: { user },
     } = await supabase.auth.getUser();
 
-    if (!user) return;
+    if (!user) {
+      setIsAuthed(false);
+      setProfile(null);
+      return;
+    }
+
+    setIsAuthed(true);
 
     const { data } = await supabase
       .from("profiles")
@@ -187,7 +195,9 @@ export default function HomePage() {
       const text = await extractScriptTextFromFile(file, isZh);
 
       if (!text.trim()) {
-        throw new Error(isZh ? "上传文件内容为空，无法提取剧本" : "The uploaded file is empty");
+        throw new Error(
+          isZh ? "上传文件内容为空，无法提取剧本" : "The uploaded file is empty"
+        );
       }
 
       setScriptText(text);
@@ -217,12 +227,24 @@ export default function HomePage() {
     const trimmed = scriptText.trim();
 
     if (!trimmed) {
-      setErrorMessage(isZh ? "请先输入或上传剧本内容" : "Please upload or paste your script first");
+      setErrorMessage(
+        isZh ? "请先输入或上传剧本内容" : "Please upload or paste your script first"
+      );
       return;
     }
 
     saveDraftScript(trimmed, loadedFileName || undefined);
     router.push(`/${locale}/generate`);
+  }
+
+  async function handleSignOut() {
+    setSigningOut(true);
+    await supabase.auth.signOut();
+    setIsAuthed(false);
+    setProfile(null);
+    setSigningOut(false);
+    router.refresh();
+    router.push(`/${locale}`);
   }
 
   const quotaText =
@@ -238,11 +260,22 @@ export default function HomePage() {
       ? "未登录也可以先体验上传"
       : "You can try uploading before signing in";
 
+  const planText = profile
+    ? profile.plan === "studio"
+      ? "Studio"
+      : profile.plan === "pro"
+      ? "Pro"
+      : "Free"
+    : isZh
+    ? "访客"
+    : "Guest";
+
   return (
     <main className="min-h-screen bg-[#05070b] text-white">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute left-[-120px] top-[120px] h-[380px] w-[380px] rounded-full bg-emerald-500/10 blur-3xl" />
-        <div className="absolute right-[-80px] top-[140px] h-[420px] w-[420px] rounded-full bg-cyan-500/10 blur-3xl" />
+        <div className="absolute right-[-80px] top-[120px] h-[420px] w-[420px] rounded-full bg-cyan-500/10 blur-3xl" />
+        <div className="absolute left-[20%] top-[40%] h-[220px] w-[220px] rounded-full bg-emerald-400/5 blur-3xl" />
       </div>
 
       <header className="sticky top-0 z-30 border-b border-white/10 bg-[#05070b]/80 backdrop-blur">
@@ -257,35 +290,54 @@ export default function HomePage() {
           <div className="flex items-center gap-3">
             <Link
               href={`/${locale}/jobs`}
-              className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-zinc-200"
+              className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-zinc-200 transition hover:bg-white/[0.08]"
             >
               {isZh ? "我的任务" : "My Jobs"}
             </Link>
 
-            <Link
-              href={`/${locale}/account`}
-              className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-zinc-200"
-            >
-              {isZh ? "账户中心" : "Account"}
-            </Link>
+            {isAuthed ? (
+              <>
+                <Link
+                  href={`/${locale}/account`}
+                  className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-zinc-200 transition hover:bg-white/[0.08]"
+                >
+                  {isZh ? "账户中心" : "Account"}
+                </Link>
+
+                <button
+                  onClick={handleSignOut}
+                  disabled={signingOut}
+                  className="rounded-full border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm text-red-300 transition hover:bg-red-500/15 disabled:opacity-50"
+                >
+                  {signingOut ? (isZh ? "退出中..." : "Signing out...") : isZh ? "退出登录" : "Sign Out"}
+                </button>
+              </>
+            ) : (
+              <Link
+                href={`/${locale}/auth`}
+                className="rounded-full bg-emerald-400 px-4 py-2 text-sm font-semibold text-black transition hover:bg-emerald-300"
+              >
+                {isZh ? "登录 / 注册" : "Login / Sign Up"}
+              </Link>
+            )}
 
             <LanguageSwitch locale={locale} />
           </div>
         </div>
       </header>
 
-      <section className="mx-auto max-w-7xl px-6 pb-12 pt-16">
-        <div className="grid items-start gap-10 xl:grid-cols-[1.05fr_0.95fr]">
-          <div className="pt-10">
+      <section className="mx-auto max-w-7xl px-6 pb-14 pt-16">
+        <div className="grid items-start gap-12 xl:grid-cols-[1.05fr_0.95fr]">
+          <div className="pt-8">
             <div className="mb-5 inline-flex rounded-full border border-emerald-400/20 bg-emerald-400/10 px-4 py-1 text-xs text-emerald-300">
               {isZh ? "AI 剧情生产入口" : "AI Story Production Entry"}
             </div>
 
-            <h1 className="max-w-4xl text-6xl font-bold leading-[1.05] tracking-tight text-white">
+            <h1 className="max-w-4xl text-5xl font-bold leading-[1.05] tracking-tight text-white md:text-7xl">
               {isZh ? "一份剧本，生成你的短剧与漫剧生产流程" : "One script, your full short-drama and comic workflow"}
             </h1>
 
-            <p className="mt-6 max-w-2xl text-2xl leading-10 text-zinc-300">
+            <p className="mt-6 max-w-2xl text-lg leading-8 text-zinc-300 md:text-2xl md:leading-10">
               {isZh
                 ? "FulushouVideo 帮你把剧本自动整理成结构化内容，包括角色识别、剧情摘要、分镜生成、爆点文案与任务化生产流程。"
                 : "FulushouVideo turns scripts into structured production assets, including character extraction, story summary, storyboard generation, cover hooks, and a task-based workflow."}
@@ -304,34 +356,56 @@ export default function HomePage() {
             </div>
 
             <div className="mt-10 grid gap-4 sm:grid-cols-3">
-              <div className="rounded-[28px] border border-white/10 bg-gradient-to-b from-white/[0.06] to-white/[0.03] p-6">
+              <div className="rounded-[28px] border border-white/10 bg-gradient-to-b from-white/[0.06] to-white/[0.03] p-6 shadow-[0_10px_30px_rgba(0,0,0,0.22)]">
                 <div className="text-sm text-zinc-400">{isZh ? "更快进入生产" : "Faster Start"}</div>
                 <div className="mt-3 text-2xl font-bold text-white">{isZh ? "上传即开始" : "Upload & Start"}</div>
               </div>
 
-              <div className="rounded-[28px] border border-white/10 bg-gradient-to-b from-white/[0.06] to-white/[0.03] p-6">
-                <div className="text-sm text-zinc-400">{isZh ? "更适合剧情内容" : "Better for Story Content"}</div>
+              <div className="rounded-[28px] border border-white/10 bg-gradient-to-b from-white/[0.06] to-white/[0.03] p-6 shadow-[0_10px_30px_rgba(0,0,0,0.22)]">
+                <div className="text-sm text-zinc-400">{isZh ? "更适合剧情内容" : "Built for Story"}</div>
                 <div className="mt-3 text-2xl font-bold text-white">{isZh ? "短剧 / 漫剧" : "Drama / Comic"}</div>
               </div>
 
-              <div className="rounded-[28px] border border-white/10 bg-gradient-to-b from-white/[0.06] to-white/[0.03] p-6">
+              <div className="rounded-[28px] border border-white/10 bg-gradient-to-b from-white/[0.06] to-white/[0.03] p-6 shadow-[0_10px_30px_rgba(0,0,0,0.22)]">
                 <div className="text-sm text-zinc-400">{isZh ? "任务化管理" : "Task Workflow"}</div>
                 <div className="mt-3 text-2xl font-bold text-white">{isZh ? "进度可追踪" : "Track Progress"}</div>
               </div>
             </div>
+
+            <div className="mt-10 rounded-[32px] border border-white/10 bg-gradient-to-r from-zinc-900/90 to-zinc-950/90 p-7 shadow-[0_20px_60px_rgba(0,0,0,0.25)]">
+              <div className="text-sm font-medium text-emerald-300">
+                {isZh ? "核心价值" : "Core Value"}
+              </div>
+              <div className="mt-3 text-3xl font-bold leading-tight text-white md:text-5xl">
+                {isZh ? "不只是生成，而是帮你搭建完整的内容生产流程" : "More than generation — a full content workflow"}
+              </div>
+              <p className="mt-5 max-w-4xl text-base leading-8 text-zinc-300">
+                {isZh
+                  ? "传统短剧和漫剧制作里，剧本拆解、角色整理、分镜规划、爆点提炼都非常耗时。FulushouVideo 把这些高频重复工作自动化，让你从手动整理升级到任务驱动生成。"
+                  : "Traditional short-drama and comic production requires script breakdown, character sorting, storyboard planning, and hook drafting. FulushouVideo automates those repetitive tasks and upgrades your workflow into a task-driven system."}
+              </p>
+            </div>
           </div>
 
           <div className="relative">
-            <div className="absolute inset-0 rounded-[32px] bg-gradient-to-br from-emerald-400/10 via-transparent to-cyan-400/10 blur-xl" />
-            <div className="relative rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900/95 to-zinc-950/95 p-6 shadow-[0_20px_80px_rgba(0,0,0,0.45)]">
-              <div className="text-4xl font-bold text-white">
-                {isZh ? "上传剧本并进入生成" : "Upload Script and Continue"}
-              </div>
+            <div className="absolute inset-0 rounded-[34px] bg-gradient-to-br from-emerald-400/10 via-transparent to-cyan-400/10 blur-xl" />
+            <div className="relative rounded-[34px] border border-white/10 bg-gradient-to-b from-zinc-900/95 to-zinc-950/95 p-6 shadow-[0_24px_100px_rgba(0,0,0,0.48)]">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-3xl font-bold text-white">
+                    {isZh ? "上传剧本并进入生成" : "Upload Script and Continue"}
+                  </div>
+                  <div className="mt-2 text-sm leading-7 text-zinc-400">
+                    {isZh
+                      ? "先上传或粘贴剧本，再进入生成页继续编辑与启动任务。"
+                      : "Upload or paste your script here, then continue to the generation page."}
+                  </div>
+                </div>
 
-              <div className="mt-3 text-sm leading-7 text-zinc-400">
-                {isZh
-                  ? "先上传或粘贴剧本，再进入生成页继续编辑与启动任务。"
-                  : "Upload or paste your script here, then continue to the generation page."}
+                <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-right">
+                  <div className="text-xs text-zinc-400">{isZh ? "当前身份" : "Current Status"}</div>
+                  <div className="mt-1 text-sm font-semibold text-white">{planText}</div>
+                </div>
               </div>
 
               <div className="mt-4 text-sm text-zinc-500">{quotaText}</div>
@@ -407,7 +481,7 @@ export default function HomePage() {
                         localStorage.removeItem(DRAFT_SCRIPT_TEXT_KEY);
                         localStorage.removeItem(DRAFT_SCRIPT_NAME_KEY);
                       }}
-                      className="rounded-2xl border border-white/10 px-5 py-3 text-sm text-zinc-200"
+                      className="rounded-2xl border border-white/10 px-5 py-3 text-sm text-zinc-200 transition hover:bg-white/[0.05]"
                     >
                       {isZh ? "清空" : "Clear"}
                     </button>
@@ -462,7 +536,7 @@ export default function HomePage() {
               <div className="mt-6 flex flex-wrap gap-3">
                 <button
                   onClick={goToGenerate}
-                  className="rounded-2xl bg-emerald-400 px-6 py-3 text-sm font-semibold text-black"
+                  className="rounded-2xl bg-emerald-400 px-6 py-3 text-sm font-semibold text-black transition hover:bg-emerald-300"
                 >
                   {isZh ? "进入生成页" : "Continue to Generate"}
                 </button>
@@ -474,14 +548,14 @@ export default function HomePage() {
                     setLoadedFileName(isZh ? "示例剧本" : "Example Script");
                     saveDraftScript(example, isZh ? "示例剧本" : "Example Script");
                   }}
-                  className="rounded-2xl border border-white/10 px-6 py-3 text-sm text-zinc-200"
+                  className="rounded-2xl border border-white/10 px-6 py-3 text-sm text-zinc-200 transition hover:bg-white/[0.05]"
                 >
                   {isZh ? "填充示例剧本" : "Use Example Script"}
                 </button>
 
                 <Link
                   href={`/${locale}/jobs`}
-                  className="rounded-2xl border border-white/10 px-6 py-3 text-sm text-zinc-200"
+                  className="rounded-2xl border border-white/10 px-6 py-3 text-sm text-zinc-200 transition hover:bg-white/[0.05]"
                 >
                   {isZh ? "查看任务中心" : "Open Jobs Center"}
                 </Link>
@@ -498,18 +572,91 @@ export default function HomePage() {
       </section>
 
       <section className="mx-auto max-w-7xl px-6 py-12">
-        <div className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-8">
-          <div className="text-sm font-medium text-emerald-300">
-            {isZh ? "核心价值" : "Core Value"}
+        <div className="grid gap-6 md:grid-cols-3">
+          <div className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-7">
+            <div className="text-sm font-medium text-emerald-300">
+              {isZh ? "功能一" : "Feature 1"}
+            </div>
+            <div className="mt-3 text-3xl font-bold text-white">
+              {isZh ? "AI 剧本结构化" : "AI Script Structuring"}
+            </div>
+            <p className="mt-4 text-sm leading-7 text-zinc-300">
+              {isZh
+                ? "自动识别角色、提炼剧情摘要、整理项目类型和适合传播的 AI 标题。"
+                : "Automatically extracts characters, story summaries, project types, and marketable AI-enhanced titles."}
+            </p>
           </div>
-          <div className="mt-3 text-5xl font-bold leading-tight text-white">
-            {isZh ? "不只是生成，而是帮你搭建完整的内容生产流程" : "More than generation — a full content production workflow"}
+
+          <div className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-7">
+            <div className="text-sm font-medium text-emerald-300">
+              {isZh ? "功能二" : "Feature 2"}
+            </div>
+            <div className="mt-3 text-3xl font-bold text-white">
+              {isZh ? "分镜与封面文案" : "Storyboard & Cover Copy"}
+            </div>
+            <p className="mt-4 text-sm leading-7 text-zinc-300">
+              {isZh
+                ? "自动输出分镜结构、镜头说明和封面爆点文案，方便后续图像与视频生成。"
+                : "Outputs storyboard structure, shot descriptions, and cover hook copy for future image and video generation."}
+            </p>
           </div>
-          <p className="mt-6 max-w-5xl text-base leading-8 text-zinc-300">
+
+          <div className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-7">
+            <div className="text-sm font-medium text-emerald-300">
+              {isZh ? "功能三" : "Feature 3"}
+            </div>
+            <div className="mt-3 text-3xl font-bold text-white">
+              {isZh ? "任务化生产流程" : "Task-based Workflow"}
+            </div>
+            <p className="mt-4 text-sm leading-7 text-zinc-300">
+              {isZh
+                ? "每次生成都会记录任务状态、结构化结果和历史记录，更适合持续改稿和批量生产。"
+                : "Each generation is tracked with status, structured output, and history, making it suitable for iterative editing and scaled production."}
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-7xl px-6 py-14">
+        <div className="rounded-[36px] border border-emerald-400/20 bg-gradient-to-br from-emerald-400/15 via-emerald-400/10 to-cyan-400/10 p-10 text-center shadow-[0_20px_80px_rgba(16,185,129,0.08)]">
+          <div className="text-sm font-medium text-emerald-200">
+            {isZh ? "开始创作" : "Start Creating"}
+          </div>
+
+          <h2 className="mt-3 text-4xl font-bold leading-tight text-white md:text-5xl">
+            {isZh ? "把剧本交给 AI，让内容生产更快推进" : "Give your script to AI and move production faster"}
+          </h2>
+
+          <p className="mx-auto mt-4 max-w-3xl text-base leading-8 text-zinc-200">
             {isZh
-              ? "传统短剧和漫剧制作里，剧本拆解、角色整理、分镜规划、爆点提炼都非常耗时。FulushouVideo 把这些高频重复工作自动化，让你从手动整理升级到任务驱动生成。"
-              : "Traditional short-drama and comic production requires time-consuming script breakdown, character sorting, storyboard planning, and cover hook drafting. FulushouVideo automates these repetitive tasks and upgrades your workflow into a task-driven system."}
+              ? "从上传剧本、进入生成、查看结果到回看任务，这套流程已经可以支撑你的短剧与漫剧内容生产。"
+              : "From uploading scripts to generating structured results and reviewing task history, this workflow is ready for drama and comic content production."}
           </p>
+
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
+            <button
+              onClick={goToGenerate}
+              className="rounded-2xl bg-black px-6 py-3 text-sm font-semibold text-white transition hover:bg-zinc-800"
+            >
+              {isZh ? "立即开始" : "Start Now"}
+            </button>
+
+            {!isAuthed ? (
+              <Link
+                href={`/${locale}/auth`}
+                className="rounded-2xl border border-white/20 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/[0.05]"
+              >
+                {isZh ? "登录后管理任务" : "Login to Manage Jobs"}
+              </Link>
+            ) : (
+              <Link
+                href={`/${locale}/account`}
+                className="rounded-2xl border border-white/20 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/[0.05]"
+              >
+                {isZh ? "进入账户中心" : "Open Account"}
+              </Link>
+            )}
+          </div>
         </div>
       </section>
     </main>
