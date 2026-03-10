@@ -39,7 +39,43 @@ type OrderRow = {
   created_at: string;
 };
 
-type TabKey = "overview" | "users" | "orders" | "generations" | "grant";
+type GenerationJobRow = {
+  id: string;
+  user_id: string;
+  email: string | null;
+  script_title: string | null;
+  source_type: string | null;
+  status: string;
+  progress: number;
+  result_url: string | null;
+  error_message: string | null;
+  plan: string;
+  quota_cost: number;
+  created_at: string;
+  updated_at: string;
+};
+
+type AdminLogRow = {
+  id: string;
+  admin_id: string;
+  admin_email: string | null;
+  action: string;
+  target_type: string;
+  target_id: string | null;
+  detail: Record<string, unknown> | null;
+  created_at: string;
+};
+
+type TabKey =
+  | "overview"
+  | "users"
+  | "orders"
+  | "generations"
+  | "jobs"
+  | "logs"
+  | "grant";
+
+type RangeKey = "all" | "7d" | "30d" | "90d";
 
 type MonthlyPoint = {
   key: string;
@@ -58,16 +94,35 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [allowed, setAllowed] = useState(false);
 
-  const [profiles, setProfiles] = useState<ProfileRow[]>([]);
-  const [generations, setGenerations] = useState<GenerationRow[]>([]);
+  const [currentAdminId, setCurrentAdminId] = useState("");
+  const [currentAdminEmail, setCurrentAdminEmail] = useState("");
+
+  const [overviewProfiles, setOverviewProfiles] = useState<ProfileRow[]>([]);
+  const [overviewOrders, setOverviewOrders] = useState<OrderRow[]>([]);
+  const [overviewGenerations, setOverviewGenerations] = useState<GenerationRow[]>([]);
+  const [overviewJobs, setOverviewJobs] = useState<GenerationJobRow[]>([]);
+
+  const [users, setUsers] = useState<ProfileRow[]>([]);
   const [orders, setOrders] = useState<OrderRow[]>([]);
+  const [generations, setGenerations] = useState<GenerationRow[]>([]);
+  const [jobs, setJobs] = useState<GenerationJobRow[]>([]);
+  const [logs, setLogs] = useState<AdminLogRow[]>([]);
 
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
   const [search, setSearch] = useState("");
   const [planFilter, setPlanFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [rangeFilter, setRangeFilter] = useState<RangeKey>("all");
+  const [onlyPaid, setOnlyPaid] = useState(false);
+
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalCount, setTotalCount] = useState(0);
+
   const [actionMessage, setActionMessage] = useState("");
   const [updatingUserId, setUpdatingUserId] = useState("");
   const [deletingId, setDeletingId] = useState("");
+  const [updatingJobId, setUpdatingJobId] = useState("");
 
   const [grantEmail, setGrantEmail] = useState("");
   const [grantPlan, setGrantPlan] = useState<"free" | "pro" | "studio">("pro");
@@ -75,12 +130,48 @@ export default function AdminPage() {
   const [grantMethod, setGrantMethod] = useState("manual_grant");
   const [grantLoading, setGrantLoading] = useState(false);
 
-  useEffect(() => {
-    loadAdminData();
-  }, [locale, router]);
+  const isListTab =
+    activeTab === "users" ||
+    activeTab === "orders" ||
+    activeTab === "generations" ||
+    activeTab === "jobs" ||
+    activeTab === "logs";
 
-  async function loadAdminData() {
+  const supportsPlanFilter =
+    activeTab === "users" ||
+    activeTab === "orders" ||
+    activeTab === "generations" ||
+    activeTab === "jobs";
+
+  const supportsStatusFilter =
+    activeTab === "users" ||
+    activeTab === "orders" ||
+    activeTab === "generations" ||
+    activeTab === "jobs";
+
+  const supportsPaidFilter =
+    activeTab === "users" ||
+    activeTab === "orders" ||
+    activeTab === "generations" ||
+    activeTab === "jobs";
+
+  useEffect(() => {
+    bootstrapAdminPage();
+  }, [locale]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [activeTab, search, planFilter, statusFilter, rangeFilter, onlyPaid, pageSize]);
+
+  useEffect(() => {
+    if (!allowed) return;
+    if (!isListTab) return;
+    loadListData();
+  }, [allowed, activeTab, page, pageSize, search, planFilter, statusFilter, rangeFilter, onlyPaid]);
+
+  async function bootstrapAdminPage() {
     setLoading(true);
+    setActionMessage("");
 
     const {
       data: { user },
@@ -102,19 +193,240 @@ export default function AdminPage() {
       return;
     }
 
+    setCurrentAdminId(user.id);
+    setCurrentAdminEmail(user.email || "");
     setAllowed(true);
 
-    const [{ data: profileData }, { data: generationData }, { data: orderData }] =
+    await loadOverviewData();
+    setLoading(false);
+  }
+
+  async function loadOverviewData() {
+    const [{ data: profileData }, { data: generationData }, { data: orderData }, { data: jobData }] =
       await Promise.all([
         supabase.from("profiles").select("*").order("updated_at", { ascending: false }),
         supabase.from("generations").select("*").order("created_at", { ascending: false }),
         supabase.from("orders").select("*").order("created_at", { ascending: false }),
+        supabase.from("generation_jobs").select("*").order("created_at", { ascending: false }),
       ]);
 
-    setProfiles((profileData as ProfileRow[]) || []);
-    setGenerations((generationData as GenerationRow[]) || []);
-    setOrders((orderData as OrderRow[]) || []);
-    setLoading(false);
+    setOverviewProfiles((profileData as ProfileRow[]) || []);
+    setOverviewGenerations((generationData as GenerationRow[]) || []);
+    setOverviewOrders((orderData as OrderRow[]) || []);
+    setOverviewJobs((jobData as GenerationJobRow[]) || []);
+  }
+
+  function getStartDateIso(range: RangeKey) {
+    if (range === "all") return null;
+
+    const now = new Date();
+    const days = range === "7d" ? 7 : range === "30d" ? 30 : 90;
+    const start = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+    return start.toISOString();
+  }
+
+  function getDateFieldByTab(tab: TabKey) {
+    if (tab === "users") return "updated_at";
+    return "created_at";
+  }
+
+  function sanitizeSearch(value: string) {
+    return value.trim().replace(/,/g, " ").replace(/\(/g, "").replace(/\)/g, "");
+  }
+
+  function getStatusOptions(tab: TabKey) {
+    if (tab === "users") {
+      return [
+        { value: "all", labelZh: "全部状态", labelEn: "All Statuses" },
+        { value: "active", labelZh: "已生效", labelEn: "Active" },
+        { value: "banned", labelZh: "已封禁", labelEn: "Banned" },
+      ];
+    }
+
+    if (tab === "orders") {
+      return [
+        { value: "all", labelZh: "全部状态", labelEn: "All Statuses" },
+        { value: "pending", labelZh: "待支付", labelEn: "Pending" },
+        { value: "paid", labelZh: "已支付", labelEn: "Paid" },
+        { value: "failed", labelZh: "失败", labelEn: "Failed" },
+        { value: "refunded", labelZh: "已退款", labelEn: "Refunded" },
+        { value: "manual_grant", labelZh: "手动补单", labelEn: "Manual Grant" },
+      ];
+    }
+
+    if (tab === "generations" || tab === "jobs") {
+      return [
+        { value: "all", labelZh: "全部状态", labelEn: "All Statuses" },
+        { value: "pending", labelZh: "等待中", labelEn: "Pending" },
+        { value: "processing", labelZh: "生成中", labelEn: "Processing" },
+        { value: "success", labelZh: "成功", labelEn: "Success" },
+        { value: "failed", labelZh: "失败", labelEn: "Failed" },
+      ];
+    }
+
+    return [{ value: "all", labelZh: "全部状态", labelEn: "All Statuses" }];
+  }
+
+  async function loadListData() {
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+    const safeSearch = sanitizeSearch(search);
+    const startDateIso = getStartDateIso(rangeFilter);
+    const dateField = getDateFieldByTab(activeTab);
+
+    if (activeTab === "users") {
+      let query: any = supabase
+        .from("profiles")
+        .select("*", { count: "exact" });
+
+      if (planFilter !== "all") query = query.eq("plan", planFilter);
+      if (statusFilter !== "all") query = query.eq("status", statusFilter);
+      if (onlyPaid) query = query.neq("plan", "free");
+      if (startDateIso) query = query.gte(dateField, startDateIso);
+
+      if (safeSearch) {
+        query = query.or(`email.ilike.%${safeSearch}%,admin_note.ilike.%${safeSearch}%`);
+      }
+
+      const { data, count, error } = await query
+        .order("updated_at", { ascending: false })
+        .range(from, to);
+
+      if (!error) {
+        setUsers((data as ProfileRow[]) || []);
+        setTotalCount(count || 0);
+      }
+      return;
+    }
+
+    if (activeTab === "orders") {
+      let query: any = supabase
+        .from("orders")
+        .select("*", { count: "exact" });
+
+      if (planFilter !== "all") query = query.eq("plan", planFilter);
+      if (statusFilter !== "all") query = query.eq("status", statusFilter);
+      if (onlyPaid) query = query.neq("plan", "free");
+      if (startDateIso) query = query.gte(dateField, startDateIso);
+
+      if (safeSearch) {
+        query = query.or(`email.ilike.%${safeSearch}%,payment_method.ilike.%${safeSearch}%`);
+      }
+
+      const { data, count, error } = await query
+        .order("created_at", { ascending: false })
+        .range(from, to);
+
+      if (!error) {
+        setOrders((data as OrderRow[]) || []);
+        setTotalCount(count || 0);
+      }
+      return;
+    }
+
+    if (activeTab === "generations") {
+      let query: any = supabase
+        .from("generations")
+        .select("*", { count: "exact" });
+
+      if (planFilter !== "all") query = query.eq("plan", planFilter);
+      if (statusFilter !== "all") query = query.eq("status", statusFilter);
+      if (onlyPaid) query = query.neq("plan", "free");
+      if (startDateIso) query = query.gte(dateField, startDateIso);
+
+      if (safeSearch) {
+        query = query.or(`email.ilike.%${safeSearch}%,file_name.ilike.%${safeSearch}%`);
+      }
+
+      const { data, count, error } = await query
+        .order("created_at", { ascending: false })
+        .range(from, to);
+
+      if (!error) {
+        setGenerations((data as GenerationRow[]) || []);
+        setTotalCount(count || 0);
+      }
+      return;
+    }
+
+    if (activeTab === "jobs") {
+      let query: any = supabase
+        .from("generation_jobs")
+        .select("*", { count: "exact" });
+
+      if (planFilter !== "all") query = query.eq("plan", planFilter);
+      if (statusFilter !== "all") query = query.eq("status", statusFilter);
+      if (onlyPaid) query = query.neq("plan", "free");
+      if (startDateIso) query = query.gte(dateField, startDateIso);
+
+      if (safeSearch) {
+        query = query.or(
+          `email.ilike.%${safeSearch}%,script_title.ilike.%${safeSearch}%,error_message.ilike.%${safeSearch}%`
+        );
+      }
+
+      const { data, count, error } = await query
+        .order("created_at", { ascending: false })
+        .range(from, to);
+
+      if (!error) {
+        setJobs((data as GenerationJobRow[]) || []);
+        setTotalCount(count || 0);
+      }
+      return;
+    }
+
+    if (activeTab === "logs") {
+      let query: any = supabase
+        .from("admin_logs")
+        .select("*", { count: "exact" });
+
+      if (startDateIso) query = query.gte("created_at", startDateIso);
+
+      if (safeSearch) {
+        query = query.or(
+          `admin_email.ilike.%${safeSearch}%,action.ilike.%${safeSearch}%,target_type.ilike.%${safeSearch}%,target_id.ilike.%${safeSearch}%`
+        );
+      }
+
+      const { data, count, error } = await query
+        .order("created_at", { ascending: false })
+        .range(from, to);
+
+      if (!error) {
+        setLogs((data as AdminLogRow[]) || []);
+        setTotalCount(count || 0);
+      }
+      return;
+    }
+  }
+
+  async function writeAdminLog(
+    action: string,
+    targetType: string,
+    targetId: string,
+    detail?: Record<string, unknown>
+  ) {
+    if (!currentAdminId) return;
+
+    await supabase.from("admin_logs").insert([
+      {
+        admin_id: currentAdminId,
+        admin_email: currentAdminEmail || null,
+        action,
+        target_type: targetType,
+        target_id: targetId,
+        detail: detail || null,
+      },
+    ]);
+  }
+
+  async function refreshAfterMutation(targetTab?: TabKey) {
+    await loadOverviewData();
+    if (isListTab) {
+      await loadListData();
+    }
+    if (targetTab && activeTab !== targetTab) return;
   }
 
   async function handlePlanUpdate(userId: string, nextPlan: "free" | "pro" | "studio") {
@@ -127,33 +439,20 @@ export default function AdminPage() {
     });
 
     if (error) {
-      setActionMessage(
-        isZh ? `修改失败：${error.message}` : `Update failed: ${error.message}`
-      );
+      setActionMessage(isZh ? `修改失败：${error.message}` : `Update failed: ${error.message}`);
       setUpdatingUserId("");
       return;
     }
 
-    setProfiles((prev) =>
-      prev.map((item) =>
-        item.id === userId
-          ? {
-              ...item,
-              plan: nextPlan,
-              monthly_quota: nextPlan === "studio" ? 999999 : nextPlan === "pro" ? 50 : 5,
-              used_count: 0,
-              status: item.status,
-              updated_at: new Date().toISOString(),
-            }
-          : item
-      )
-    );
+    await writeAdminLog("update_user_plan", "profile", userId, {
+      next_plan: nextPlan,
+    });
 
     setActionMessage(
-      isZh
-        ? `已成功修改用户套餐为 ${formatPlan(nextPlan)}`
-        : `Plan updated to ${formatPlan(nextPlan)}`
+      isZh ? `已成功修改用户套餐为 ${formatPlan(nextPlan)}` : `Plan updated to ${formatPlan(nextPlan)}`
     );
+
+    await refreshAfterMutation("users");
     setUpdatingUserId("");
   }
 
@@ -174,17 +473,9 @@ export default function AdminPage() {
       return;
     }
 
-    setProfiles((prev) =>
-      prev.map((item) =>
-        item.id === userId
-          ? {
-              ...item,
-              status: nextStatus,
-              updated_at: new Date().toISOString(),
-            }
-          : item
-      )
-    );
+    await writeAdminLog("update_user_status", "profile", userId, {
+      next_status: nextStatus,
+    });
 
     setActionMessage(
       isZh
@@ -195,6 +486,8 @@ export default function AdminPage() {
         ? "User has been banned"
         : "User has been restored to active status"
     );
+
+    await refreshAfterMutation("users");
     setUpdatingUserId("");
   }
 
@@ -217,12 +510,17 @@ export default function AdminPage() {
     });
 
     if (error) {
-      setActionMessage(
-        isZh ? `补单失败：${error.message}` : `Grant failed: ${error.message}`
-      );
+      setActionMessage(isZh ? `补单失败：${error.message}` : `Grant failed: ${error.message}`);
       setGrantLoading(false);
       return;
     }
+
+    await writeAdminLog("grant_plan", "order", grantEmail.trim(), {
+      email: grantEmail.trim(),
+      plan: grantPlan,
+      amount: amountNumber,
+      method: grantMethod.trim() || "manual_grant",
+    });
 
     setActionMessage(
       isZh
@@ -236,7 +534,7 @@ export default function AdminPage() {
     setGrantMethod("manual_grant");
     setGrantLoading(false);
 
-    await loadAdminData();
+    await refreshAfterMutation();
   }
 
   async function handleDeleteOrder(orderId: string) {
@@ -260,8 +558,9 @@ export default function AdminPage() {
       return;
     }
 
-    setOrders((prev) => prev.filter((item) => item.id !== orderId));
+    await writeAdminLog("delete_order", "order", orderId);
     setActionMessage(isZh ? "订单记录已删除" : "Order deleted");
+    await refreshAfterMutation("orders");
     setDeletingId("");
   }
 
@@ -280,15 +579,70 @@ export default function AdminPage() {
 
     if (error) {
       setActionMessage(
-        isZh ? `删除生成记录失败：${error.message}` : `Failed to delete generation: ${error.message}`
+        isZh
+          ? `删除生成记录失败：${error.message}`
+          : `Failed to delete generation: ${error.message}`
       );
       setDeletingId("");
       return;
     }
 
-    setGenerations((prev) => prev.filter((item) => item.id !== generationId));
+    await writeAdminLog("delete_generation", "generation", generationId);
     setActionMessage(isZh ? "生成记录已删除" : "Generation deleted");
+    await refreshAfterMutation("generations");
     setDeletingId("");
+  }
+
+  async function handleJobStatusUpdate(jobId: string, nextStatus: string) {
+    setUpdatingJobId(jobId);
+    setActionMessage("");
+
+    const updatePayload: Record<string, unknown> = {
+      status: nextStatus,
+    };
+
+    if (nextStatus === "pending") {
+      updatePayload.progress = 0;
+      updatePayload.error_message = null;
+      updatePayload.result_url = null;
+    }
+
+    if (nextStatus === "processing") {
+      updatePayload.progress = 10;
+    }
+
+    if (nextStatus === "success") {
+      updatePayload.progress = 100;
+      updatePayload.error_message = null;
+    }
+
+    if (nextStatus === "failed") {
+      updatePayload.error_message = isZh ? "管理员手动标记为失败" : "Marked failed by admin";
+    }
+
+    const { error } = await supabase
+      .from("generation_jobs")
+      .update(updatePayload)
+      .eq("id", jobId);
+
+    if (error) {
+      setActionMessage(
+        isZh ? `任务状态更新失败：${error.message}` : `Job update failed: ${error.message}`
+      );
+      setUpdatingJobId("");
+      return;
+    }
+
+    await writeAdminLog("update_generation_job", "generation_job", jobId, {
+      next_status: nextStatus,
+    });
+
+    setActionMessage(
+      isZh ? `任务状态已更新为 ${formatJobStatus(nextStatus)}` : `Job status updated to ${nextStatus}`
+    );
+
+    await refreshAfterMutation("jobs");
+    setUpdatingJobId("");
   }
 
   function escapeCsvValue(value: unknown) {
@@ -318,58 +672,119 @@ export default function AdminPage() {
     URL.revokeObjectURL(url);
   }
 
-  function exportUsersCsv() {
-    downloadCsv(
-      "users.csv",
-      ["id", "email", "plan", "monthly_quota", "used_count", "status", "admin_note", "updated_at"],
-      filteredProfiles.map((item) => [
-        item.id,
-        item.email,
-        item.plan,
-        item.monthly_quota,
-        item.used_count,
-        item.status,
-        item.admin_note || "",
-        item.updated_at,
-      ])
-    );
-    setActionMessage(isZh ? "用户数据已导出 CSV" : "Users exported to CSV");
-  }
+  function exportCurrentTabCsv() {
+    if (activeTab === "users") {
+      downloadCsv(
+        "users-page.csv",
+        ["id", "email", "plan", "monthly_quota", "used_count", "status", "admin_note", "updated_at"],
+        users.map((item) => [
+          item.id,
+          item.email,
+          item.plan,
+          item.monthly_quota,
+          item.used_count,
+          item.status,
+          item.admin_note || "",
+          item.updated_at,
+        ])
+      );
+      setActionMessage(isZh ? "当前页用户数据已导出 CSV" : "Current users page exported to CSV");
+      return;
+    }
 
-  function exportOrdersCsv() {
-    downloadCsv(
-      "orders.csv",
-      ["id", "user_id", "email", "plan", "amount", "payment_method", "status", "created_at"],
-      filteredOrders.map((item) => [
-        item.id,
-        item.user_id,
-        item.email,
-        item.plan,
-        item.amount,
-        item.payment_method,
-        item.status,
-        item.created_at,
-      ])
-    );
-    setActionMessage(isZh ? "订单数据已导出 CSV" : "Orders exported to CSV");
-  }
+    if (activeTab === "orders") {
+      downloadCsv(
+        "orders-page.csv",
+        ["id", "user_id", "email", "plan", "amount", "payment_method", "status", "created_at"],
+        orders.map((item) => [
+          item.id,
+          item.user_id,
+          item.email,
+          item.plan,
+          item.amount,
+          item.payment_method,
+          item.status,
+          item.created_at,
+        ])
+      );
+      setActionMessage(isZh ? "当前页订单数据已导出 CSV" : "Current orders page exported to CSV");
+      return;
+    }
 
-  function exportGenerationsCsv() {
-    downloadCsv(
-      "generations.csv",
-      ["id", "user_id", "email", "file_name", "plan", "quota_cost", "status", "created_at"],
-      filteredGenerations.map((item) => [
-        item.id,
-        item.user_id,
-        item.email,
-        item.file_name,
-        item.plan,
-        item.quota_cost,
-        item.status,
-        item.created_at,
-      ])
-    );
-    setActionMessage(isZh ? "生成记录已导出 CSV" : "Generations exported to CSV");
+    if (activeTab === "generations") {
+      downloadCsv(
+        "generations-page.csv",
+        ["id", "user_id", "email", "file_name", "plan", "quota_cost", "status", "created_at"],
+        generations.map((item) => [
+          item.id,
+          item.user_id,
+          item.email,
+          item.file_name,
+          item.plan,
+          item.quota_cost,
+          item.status,
+          item.created_at,
+        ])
+      );
+      setActionMessage(
+        isZh ? "当前页生成记录已导出 CSV" : "Current generations page exported to CSV"
+      );
+      return;
+    }
+
+    if (activeTab === "jobs") {
+      downloadCsv(
+        "generation-jobs-page.csv",
+        [
+          "id",
+          "user_id",
+          "email",
+          "script_title",
+          "source_type",
+          "status",
+          "progress",
+          "result_url",
+          "error_message",
+          "plan",
+          "quota_cost",
+          "created_at",
+        ],
+        jobs.map((item) => [
+          item.id,
+          item.user_id,
+          item.email,
+          item.script_title,
+          item.source_type,
+          item.status,
+          item.progress,
+          item.result_url,
+          item.error_message,
+          item.plan,
+          item.quota_cost,
+          item.created_at,
+        ])
+      );
+      setActionMessage(isZh ? "当前页任务已导出 CSV" : "Current jobs page exported to CSV");
+      return;
+    }
+
+    if (activeTab === "logs") {
+      downloadCsv(
+        "admin-logs-page.csv",
+        ["id", "admin_id", "admin_email", "action", "target_type", "target_id", "detail", "created_at"],
+        logs.map((item) => [
+          item.id,
+          item.admin_id,
+          item.admin_email,
+          item.action,
+          item.target_type,
+          item.target_id,
+          JSON.stringify(item.detail || {}),
+          item.created_at,
+        ])
+      );
+      setActionMessage(isZh ? "当前页日志已导出 CSV" : "Current logs page exported to CSV");
+    }
   }
 
   function getMonthKey(dateString: string) {
@@ -400,15 +815,15 @@ export default function AdminPage() {
       });
     }
 
-    profiles.forEach((item) => {
+    overviewProfiles.forEach((item) => {
       const key = getMonthKey(item.updated_at);
       if (monthMap.has(key)) {
         monthMap.get(key)!.users += 1;
       }
     });
 
-    orders
-      .filter((item) => item.status === "paid")
+    overviewOrders
+      .filter((item) => item.status === "paid" || item.status === "manual_grant")
       .forEach((item) => {
         const key = getMonthKey(item.created_at);
         if (monthMap.has(key)) {
@@ -416,7 +831,7 @@ export default function AdminPage() {
         }
       });
 
-    generations.forEach((item) => {
+    overviewGenerations.forEach((item) => {
       const key = getMonthKey(item.created_at);
       if (monthMap.has(key)) {
         monthMap.get(key)!.generations += 1;
@@ -424,36 +839,39 @@ export default function AdminPage() {
     });
 
     return Array.from(monthMap.values());
-  }, [profiles, orders, generations]);
+  }, [overviewProfiles, overviewOrders, overviewGenerations]);
 
   const last30Days = useMemo(() => {
     const now = Date.now();
     const days30 = 30 * 24 * 60 * 60 * 1000;
 
     const activeUserSet = new Set<string>();
-    generations.forEach((item) => {
+    overviewGenerations.forEach((item) => {
       const time = new Date(item.created_at).getTime();
       if (now - time <= days30) {
         activeUserSet.add(item.user_id);
       }
     });
 
-    const recentPaidOrders = orders.filter((item) => {
+    const recentPaidOrders = overviewOrders.filter((item) => {
       const time = new Date(item.created_at).getTime();
-      return now - time <= days30 && item.status === "paid";
+      return (
+        now - time <= days30 &&
+        (item.status === "paid" || item.status === "manual_grant")
+      );
     });
 
     return {
       activeUsers: activeUserSet.size,
       paidOrders: recentPaidOrders.length,
     };
-  }, [generations, orders]);
+  }, [overviewGenerations, overviewOrders]);
 
   const planDistribution = useMemo(() => {
-    const free = profiles.filter((item) => item.plan === "free").length;
-    const pro = profiles.filter((item) => item.plan === "pro").length;
-    const studio = profiles.filter((item) => item.plan === "studio").length;
-    const total = profiles.length || 1;
+    const free = overviewProfiles.filter((item) => item.plan === "free").length;
+    const pro = overviewProfiles.filter((item) => item.plan === "pro").length;
+    const studio = overviewProfiles.filter((item) => item.plan === "studio").length;
+    const total = overviewProfiles.length || 1;
 
     return {
       free,
@@ -463,94 +881,112 @@ export default function AdminPage() {
       proPct: (pro / total) * 100,
       studioPct: (studio / total) * 100,
     };
-  }, [profiles]);
+  }, [overviewProfiles]);
 
-  const totalUsers = profiles.length;
-  const totalGenerations = generations.length;
-  const paidUsers = profiles.filter((item) => item.plan !== "free").length;
-  const totalRevenue = orders
-    .filter((item) => item.status === "paid")
+  const totalUsers = overviewProfiles.length;
+  const totalGenerations = overviewGenerations.length;
+  const totalJobs = overviewJobs.length;
+  const paidUsers = overviewProfiles.filter((item) => item.plan !== "free").length;
+  const totalRevenue = overviewOrders
+    .filter((item) => item.status === "paid" || item.status === "manual_grant")
     .reduce((sum, item) => sum + (item.amount || 0), 0);
 
   const paidConversionRate = totalUsers > 0 ? (paidUsers / totalUsers) * 100 : 0;
   const arppu = paidUsers > 0 ? totalRevenue / paidUsers : 0;
 
-  const recentGenerations = generations.slice(0, 8);
-  const recentOrders = orders.slice(0, 8);
+  const recentGenerations = overviewGenerations.slice(0, 6);
+  const recentOrders = overviewOrders.slice(0, 6);
+  const recentJobs = overviewJobs.slice(0, 6);
 
   const revenueMax = Math.max(...monthlyStats.map((item) => item.revenue), 1);
   const usersMax = Math.max(...monthlyStats.map((item) => item.users), 1);
   const generationsMax = Math.max(...monthlyStats.map((item) => item.generations), 1);
 
-  const formatPlan = useMemo(
-    () => (plan: string) => {
-      if (plan === "studio") return "Studio";
-      if (plan === "pro") return "Pro";
-      return "Free";
-    },
-    []
-  );
+  function formatPlan(plan: string) {
+    if (plan === "studio") return "Studio";
+    if (plan === "pro") return "Pro";
+    return "Free";
+  }
 
-  const formatMoney = useMemo(
-    () => (amount: number) => {
-      if (isZh) return `¥${(amount / 100).toFixed(2)}`;
-      return `$${(amount / 100).toFixed(2)}`;
-    },
-    [isZh]
-  );
+  function formatMoney(amount: number) {
+    if (isZh) return `¥${(amount / 100).toFixed(2)}`;
+    return `$${(amount / 100).toFixed(2)}`;
+  }
 
-  const formatPercent = useMemo(
-    () => (value: number) => `${value.toFixed(1)}%`,
-    []
-  );
+  function formatPercent(value: number) {
+    return `${value.toFixed(1)}%`;
+  }
 
-  const formatTime = useMemo(
-    () => (value: string) => new Date(value).toLocaleString(),
-    []
-  );
+  function formatTime(value: string) {
+    return new Date(value).toLocaleString();
+  }
 
-  const formatStatus = useMemo(
-    () => (status: string) => {
-      if (status === "banned") return isZh ? "已封禁" : "Banned";
-      if (status === "active") return isZh ? "已生效" : "Active";
-      return status;
-    },
-    [isZh]
-  );
+  function formatUserStatus(status: string) {
+    if (status === "banned") return isZh ? "已封禁" : "Banned";
+    if (status === "active") return isZh ? "已生效" : "Active";
+    return status;
+  }
 
-  const normalizedSearch = search.trim().toLowerCase();
+  function formatOrderStatus(status: string) {
+    if (status === "pending") return isZh ? "待支付" : "Pending";
+    if (status === "paid") return isZh ? "已支付" : "Paid";
+    if (status === "failed") return isZh ? "失败" : "Failed";
+    if (status === "refunded") return isZh ? "已退款" : "Refunded";
+    if (status === "manual_grant") return isZh ? "手动补单" : "Manual Grant";
+    return status;
+  }
 
-  const filteredProfiles = profiles.filter((item) => {
-    const matchesSearch =
-      !normalizedSearch ||
-      (item.email || "").toLowerCase().includes(normalizedSearch) ||
-      item.id.toLowerCase().includes(normalizedSearch) ||
-      (item.admin_note || "").toLowerCase().includes(normalizedSearch);
+  function formatJobStatus(status: string) {
+    if (status === "pending") return isZh ? "等待中" : "Pending";
+    if (status === "processing") return isZh ? "生成中" : "Processing";
+    if (status === "success") return isZh ? "成功" : "Success";
+    if (status === "failed") return isZh ? "失败" : "Failed";
+    return status;
+  }
 
-    const matchesPlan = planFilter === "all" || item.plan === planFilter;
-    return matchesSearch && matchesPlan;
-  });
+  const totalPages = Math.max(Math.ceil(totalCount / pageSize), 1);
 
-  const filteredOrders = orders.filter((item) => {
-    const matchesSearch =
-      !normalizedSearch ||
-      (item.email || "").toLowerCase().includes(normalizedSearch) ||
-      item.id.toLowerCase().includes(normalizedSearch);
+  function renderPagination() {
+    if (!isListTab) return null;
 
-    const matchesPlan = planFilter === "all" || item.plan === planFilter;
-    return matchesSearch && matchesPlan;
-  });
+    return (
+      <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-white/10 bg-zinc-900 p-4 md:flex-row md:items-center md:justify-between">
+        <div className="text-sm text-zinc-400">
+          {isZh
+            ? `共 ${totalCount} 条，当前第 ${page} / ${totalPages} 页`
+            : `Total ${totalCount} items, page ${page} / ${totalPages}`}
+        </div>
 
-  const filteredGenerations = generations.filter((item) => {
-    const matchesSearch =
-      !normalizedSearch ||
-      (item.email || "").toLowerCase().includes(normalizedSearch) ||
-      (item.file_name || "").toLowerCase().includes(normalizedSearch) ||
-      item.id.toLowerCase().includes(normalizedSearch);
+        <div className="flex flex-wrap items-center gap-3">
+          <select
+            value={pageSize}
+            onChange={(e) => setPageSize(Number(e.target.value))}
+            className="h-10 rounded-xl border border-white/10 bg-zinc-950 px-4 text-sm text-white outline-none"
+          >
+            <option value={10}>{isZh ? "每页 10 条" : "10 / page"}</option>
+            <option value={20}>{isZh ? "每页 20 条" : "20 / page"}</option>
+            <option value={50}>{isZh ? "每页 50 条" : "50 / page"}</option>
+          </select>
 
-    const matchesPlan = planFilter === "all" || item.plan === planFilter;
-    return matchesSearch && matchesPlan;
-  });
+          <button
+            onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+            disabled={page <= 1}
+            className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-200 disabled:opacity-40"
+          >
+            {isZh ? "上一页" : "Previous"}
+          </button>
+
+          <button
+            onClick={() => setPage((prev) => Math.min(prev + 1, totalPages))}
+            disabled={page >= totalPages}
+            className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-200 disabled:opacity-40"
+          >
+            {isZh ? "下一页" : "Next"}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -571,7 +1007,7 @@ export default function AdminPage() {
           <div>
             <div className="text-xl font-semibold tracking-tight">FulushouVideo</div>
             <div className="text-xs text-zinc-400">
-              {isZh ? "管理员后台" : "Admin Dashboard"}
+              {isZh ? "管理员后台 V2" : "Admin Dashboard V2"}
             </div>
           </div>
 
@@ -605,12 +1041,12 @@ export default function AdminPage() {
 
           <p className="mt-3 text-zinc-400">
             {isZh
-              ? "查看全站用户、订单、生成情况，并支持搜索、筛选、改套餐、补单、封禁、数据清理、CSV 导出和高级运营统计。"
-              : "Review platform users, orders, and generations with search, filters, plan edits, grants, bans, cleanup tools, CSV export, and advanced business metrics."}
+              ? "支持分页、生成任务管理、管理员日志、套餐与用户管理、订单与生成记录管理、CSV 导出以及运营数据看板。"
+              : "Manage users, orders, generations, generation jobs, admin logs, CSV export, and business analytics with pagination."}
           </p>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-5">
           <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6">
             <div className="text-sm text-zinc-400">{isZh ? "总用户数" : "Total Users"}</div>
             <div className="mt-3 text-4xl font-bold">{totalUsers}</div>
@@ -618,6 +1054,10 @@ export default function AdminPage() {
           <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6">
             <div className="text-sm text-zinc-400">{isZh ? "总生成次数" : "Total Generations"}</div>
             <div className="mt-3 text-4xl font-bold">{totalGenerations}</div>
+          </div>
+          <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6">
+            <div className="text-sm text-zinc-400">{isZh ? "生成任务数" : "Generation Jobs"}</div>
+            <div className="mt-3 text-4xl font-bold">{totalJobs}</div>
           </div>
           <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6">
             <div className="text-sm text-zinc-400">{isZh ? "付费用户数" : "Paid Users"}</div>
@@ -630,7 +1070,7 @@ export default function AdminPage() {
         </div>
 
         <div className="mt-8 rounded-3xl border border-white/10 bg-zinc-900 p-4">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex flex-col gap-4">
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => setActiveTab("overview")}
@@ -673,6 +1113,26 @@ export default function AdminPage() {
                 {isZh ? "生成记录" : "Generations"}
               </button>
               <button
+                onClick={() => setActiveTab("jobs")}
+                className={`rounded-xl px-4 py-2 text-sm ${
+                  activeTab === "jobs"
+                    ? "bg-emerald-400 text-black"
+                    : "border border-white/10 bg-zinc-950 text-zinc-300"
+                }`}
+              >
+                {isZh ? "生成任务" : "Generation Jobs"}
+              </button>
+              <button
+                onClick={() => setActiveTab("logs")}
+                className={`rounded-xl px-4 py-2 text-sm ${
+                  activeTab === "logs"
+                    ? "bg-emerald-400 text-black"
+                    : "border border-white/10 bg-zinc-950 text-zinc-300"
+                }`}
+              >
+                {isZh ? "管理员日志" : "Admin Logs"}
+              </button>
+              <button
                 onClick={() => setActiveTab("grant")}
                 className={`rounded-xl px-4 py-2 text-sm ${
                   activeTab === "grant"
@@ -684,45 +1144,80 @@ export default function AdminPage() {
               </button>
             </div>
 
-            <div className="flex flex-col gap-3 xl:flex-row">
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder={isZh ? "搜索邮箱 / 文件名 / ID / 备注" : "Search email / file / ID / note"}
-                className="h-10 rounded-xl border border-white/10 bg-zinc-950 px-4 text-sm text-white outline-none placeholder:text-zinc-500"
-              />
-              <select
-                value={planFilter}
-                onChange={(e) => setPlanFilter(e.target.value)}
-                className="h-10 rounded-xl border border-white/10 bg-zinc-950 px-4 text-sm text-white outline-none"
-              >
-                <option value="all">{isZh ? "全部套餐" : "All Plans"}</option>
-                <option value="free">Free</option>
-                <option value="pro">Pro</option>
-                <option value="studio">Studio</option>
-              </select>
-            </div>
-          </div>
+            {isListTab && (
+              <div className="flex flex-col gap-3 xl:flex-row xl:flex-wrap">
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder={
+                    activeTab === "logs"
+                      ? isZh
+                        ? "搜索管理员邮箱 / 动作 / 目标"
+                        : "Search admin email / action / target"
+                      : isZh
+                      ? "搜索邮箱 / 文件名 / 备注"
+                      : "Search email / file / note"
+                  }
+                  className="h-10 rounded-xl border border-white/10 bg-zinc-950 px-4 text-sm text-white outline-none placeholder:text-zinc-500"
+                />
 
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button
-              onClick={exportUsersCsv}
-              className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-200"
-            >
-              {isZh ? "导出用户 CSV" : "Export Users CSV"}
-            </button>
-            <button
-              onClick={exportOrdersCsv}
-              className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-200"
-            >
-              {isZh ? "导出订单 CSV" : "Export Orders CSV"}
-            </button>
-            <button
-              onClick={exportGenerationsCsv}
-              className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-200"
-            >
-              {isZh ? "导出生成记录 CSV" : "Export Generations CSV"}
-            </button>
+                {supportsPlanFilter && (
+                  <select
+                    value={planFilter}
+                    onChange={(e) => setPlanFilter(e.target.value)}
+                    className="h-10 rounded-xl border border-white/10 bg-zinc-950 px-4 text-sm text-white outline-none"
+                  >
+                    <option value="all">{isZh ? "全部套餐" : "All Plans"}</option>
+                    <option value="free">Free</option>
+                    <option value="pro">Pro</option>
+                    <option value="studio">Studio</option>
+                  </select>
+                )}
+
+                {supportsStatusFilter && (
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="h-10 rounded-xl border border-white/10 bg-zinc-950 px-4 text-sm text-white outline-none"
+                  >
+                    {getStatusOptions(activeTab).map((item) => (
+                      <option key={item.value} value={item.value}>
+                        {isZh ? item.labelZh : item.labelEn}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                <select
+                  value={rangeFilter}
+                  onChange={(e) => setRangeFilter(e.target.value as RangeKey)}
+                  className="h-10 rounded-xl border border-white/10 bg-zinc-950 px-4 text-sm text-white outline-none"
+                >
+                  <option value="all">{isZh ? "全部时间" : "All Time"}</option>
+                  <option value="7d">{isZh ? "最近 7 天" : "Last 7 Days"}</option>
+                  <option value="30d">{isZh ? "最近 30 天" : "Last 30 Days"}</option>
+                  <option value="90d">{isZh ? "最近 90 天" : "Last 90 Days"}</option>
+                </select>
+
+                {supportsPaidFilter && (
+                  <label className="flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-zinc-950 px-4 text-sm text-zinc-200">
+                    <input
+                      type="checkbox"
+                      checked={onlyPaid}
+                      onChange={(e) => setOnlyPaid(e.target.checked)}
+                    />
+                    <span>{isZh ? "只看付费用户" : "Paid Only"}</span>
+                  </label>
+                )}
+
+                <button
+                  onClick={exportCurrentTabCsv}
+                  className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-200"
+                >
+                  {isZh ? "导出当前页 CSV" : "Export Current Page CSV"}
+                </button>
+              </div>
+            )}
           </div>
 
           {actionMessage && (
@@ -736,12 +1231,8 @@ export default function AdminPage() {
           <>
             <div className="mt-8 grid gap-6 xl:grid-cols-5">
               <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6">
-                <div className="text-sm text-zinc-400">
-                  {isZh ? "付费转化率" : "Paid Conversion"}
-                </div>
-                <div className="mt-3 text-3xl font-bold">
-                  {formatPercent(paidConversionRate)}
-                </div>
+                <div className="text-sm text-zinc-400">{isZh ? "付费转化率" : "Paid Conversion"}</div>
+                <div className="mt-3 text-3xl font-bold">{formatPercent(paidConversionRate)}</div>
                 <div className="mt-2 text-xs text-zinc-500">
                   {isZh ? "付费用户 / 总用户" : "Paid users / total users"}
                 </div>
@@ -763,14 +1254,12 @@ export default function AdminPage() {
                 </div>
                 <div className="mt-3 text-3xl font-bold">{last30Days.paidOrders}</div>
                 <div className="mt-2 text-xs text-zinc-500">
-                  {isZh ? "仅统计 paid" : "Paid status only"}
+                  {isZh ? "含 manual_grant" : "Includes manual_grant"}
                 </div>
               </div>
 
               <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6">
-                <div className="text-sm text-zinc-400">
-                  {isZh ? "ARPPU" : "ARPPU"}
-                </div>
+                <div className="text-sm text-zinc-400">ARPPU</div>
                 <div className="mt-3 text-3xl font-bold">{formatMoney(arppu)}</div>
                 <div className="mt-2 text-xs text-zinc-500">
                   {isZh ? "每付费用户平均收入" : "Avg revenue per paid user"}
@@ -778,22 +1267,16 @@ export default function AdminPage() {
               </div>
 
               <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6">
-                <div className="text-sm text-zinc-400">
-                  {isZh ? "套餐分布" : "Plan Mix"}
+                <div className="text-sm text-zinc-400">{isZh ? "任务成功率" : "Job Success Rate"}</div>
+                <div className="mt-3 text-3xl font-bold">
+                  {formatPercent(
+                    overviewJobs.length > 0
+                      ? (overviewJobs.filter((item) => item.status === "success").length / overviewJobs.length) * 100
+                      : 0
+                  )}
                 </div>
-                <div className="mt-3 space-y-2 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span>Free</span>
-                    <span>{planDistribution.free}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span>Pro</span>
-                    <span>{planDistribution.pro}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span>Studio</span>
-                    <span>{planDistribution.studio}</span>
-                  </div>
+                <div className="mt-2 text-xs text-zinc-500">
+                  {isZh ? "成功任务 / 总任务" : "Success jobs / total jobs"}
                 </div>
               </div>
             </div>
@@ -841,10 +1324,7 @@ export default function AdminPage() {
                         <div
                           className="h-3 rounded-full bg-white"
                           style={{
-                            width: `${Math.max(
-                              (item.users / usersMax) * 100,
-                              item.users > 0 ? 8 : 0
-                            )}%`,
+                            width: `${Math.max((item.users / usersMax) * 100, item.users > 0 ? 8 : 0)}%`,
                           }}
                         />
                       </div>
@@ -882,7 +1362,7 @@ export default function AdminPage() {
             </div>
 
             <div className="mt-8 grid gap-6 xl:grid-cols-3">
-              <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6 xl:col-span-2">
+              <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6">
                 <div className="mb-4 text-xl font-semibold">
                   {isZh ? "最近生成记录" : "Recent Generations"}
                 </div>
@@ -895,23 +1375,19 @@ export default function AdminPage() {
                   <div className="space-y-4">
                     {recentGenerations.map((item) => (
                       <div key={item.id} className="rounded-2xl bg-zinc-950 p-4">
-                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                          <div>
-                            <div className="font-medium">
-                              {item.file_name || (isZh ? "未命名文件" : "Untitled file")}
-                            </div>
-                            <div className="mt-1 text-xs text-zinc-500">{item.email || "-"}</div>
+                        <div className="font-medium">
+                          {item.file_name || (isZh ? "未命名文件" : "Untitled file")}
+                        </div>
+                        <div className="mt-1 text-xs text-zinc-500">{item.email || "-"}</div>
+                        <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                            {formatPlan(item.plan)}
                           </div>
-                          <div className="flex flex-wrap gap-2 text-xs">
-                            <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
-                              {formatPlan(item.plan)}
-                            </div>
-                            <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
-                              {isZh ? "消耗" : "Cost"}: {item.quota_cost}
-                            </div>
-                            <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
-                              {formatTime(item.created_at)}
-                            </div>
+                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                            {item.status}
+                          </div>
+                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                            {formatTime(item.created_at)}
                           </div>
                         </div>
                       </div>
@@ -922,79 +1398,337 @@ export default function AdminPage() {
 
               <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6">
                 <div className="mb-4 text-xl font-semibold">
-                  {isZh ? "套餐占比" : "Plan Distribution"}
+                  {isZh ? "最近订单记录" : "Recent Orders"}
                 </div>
 
-                <div className="space-y-5">
-                  <div>
-                    <div className="mb-2 flex items-center justify-between text-sm">
-                      <span>Free</span>
-                      <span>{planDistribution.free} · {formatPercent(planDistribution.freePct)}</span>
-                    </div>
-                    <div className="h-3 rounded-full bg-zinc-950">
-                      <div
-                        className="h-3 rounded-full bg-zinc-400"
-                        style={{ width: `${Math.max(planDistribution.freePct, planDistribution.free > 0 ? 8 : 0)}%` }}
-                      />
-                    </div>
+                {recentOrders.length === 0 ? (
+                  <div className="rounded-2xl bg-zinc-950 p-6 text-zinc-400">
+                    {isZh ? "暂无订单记录" : "No order records yet"}
                   </div>
+                ) : (
+                  <div className="space-y-4">
+                    {recentOrders.map((item) => (
+                      <div key={item.id} className="rounded-2xl bg-zinc-950 p-4">
+                        <div className="font-medium">{item.email || "-"}</div>
+                        <div className="mt-1 text-xs text-zinc-500">{formatPlan(item.plan)}</div>
+                        <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                            {formatMoney(item.amount)}
+                          </div>
+                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                            {formatOrderStatus(item.status)}
+                          </div>
+                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                            {formatTime(item.created_at)}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
 
-                  <div>
-                    <div className="mb-2 flex items-center justify-between text-sm">
-                      <span>Pro</span>
-                      <span>{planDistribution.pro} · {formatPercent(planDistribution.proPct)}</span>
-                    </div>
-                    <div className="h-3 rounded-full bg-zinc-950">
-                      <div
-                        className="h-3 rounded-full bg-white"
-                        style={{ width: `${Math.max(planDistribution.proPct, planDistribution.pro > 0 ? 8 : 0)}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="mb-2 flex items-center justify-between text-sm">
-                      <span>Studio</span>
-                      <span>{planDistribution.studio} · {formatPercent(planDistribution.studioPct)}</span>
-                    </div>
-                    <div className="h-3 rounded-full bg-zinc-950">
-                      <div
-                        className="h-3 rounded-full bg-emerald-400"
-                        style={{ width: `${Math.max(planDistribution.studioPct, planDistribution.studio > 0 ? 8 : 0)}%` }}
-                      />
-                    </div>
-                  </div>
+              <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6">
+                <div className="mb-4 text-xl font-semibold">
+                  {isZh ? "最近生成任务" : "Recent Jobs"}
                 </div>
 
-                <div className="mt-6 rounded-2xl bg-zinc-950 p-4 text-sm text-zinc-400">
-                  {isZh
-                    ? "可用来快速判断当前产品主要收入来自哪个套餐层级。"
-                    : "Useful for quickly seeing which plan tier is driving your business."}
-                </div>
+                {recentJobs.length === 0 ? (
+                  <div className="rounded-2xl bg-zinc-950 p-6 text-zinc-400">
+                    {isZh ? "暂无生成任务" : "No generation jobs yet"}
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {recentJobs.map((item) => (
+                      <div key={item.id} className="rounded-2xl bg-zinc-950 p-4">
+                        <div className="font-medium">
+                          {item.script_title || (isZh ? "未命名任务" : "Untitled job")}
+                        </div>
+                        <div className="mt-1 text-xs text-zinc-500">{item.email || "-"}</div>
+                        <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                            {formatJobStatus(item.status)}
+                          </div>
+                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                            {isZh ? "进度" : "Progress"}: {item.progress}%
+                          </div>
+                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                            {formatTime(item.created_at)}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
             <div className="mt-8 rounded-3xl border border-white/10 bg-zinc-900 p-6">
               <div className="mb-4 text-xl font-semibold">
-                {isZh ? "最近订单记录" : "Recent Orders"}
+                {isZh ? "套餐分布" : "Plan Distribution"}
               </div>
 
-              {recentOrders.length === 0 ? (
-                <div className="rounded-2xl bg-zinc-950 p-6 text-zinc-400">
-                  {isZh ? "暂无订单记录" : "No order records yet"}
+              <div className="space-y-5">
+                <div>
+                  <div className="mb-2 flex items-center justify-between text-sm">
+                    <span>Free</span>
+                    <span>
+                      {planDistribution.free} · {formatPercent(planDistribution.freePct)}
+                    </span>
+                  </div>
+                  <div className="h-3 rounded-full bg-zinc-950">
+                    <div
+                      className="h-3 rounded-full bg-zinc-400"
+                      style={{
+                        width: `${Math.max(
+                          planDistribution.freePct,
+                          planDistribution.free > 0 ? 8 : 0
+                        )}%`,
+                      }}
+                    />
+                  </div>
                 </div>
-              ) : (
-                <div className="space-y-4">
-                  {recentOrders.map((item) => (
+
+                <div>
+                  <div className="mb-2 flex items-center justify-between text-sm">
+                    <span>Pro</span>
+                    <span>
+                      {planDistribution.pro} · {formatPercent(planDistribution.proPct)}
+                    </span>
+                  </div>
+                  <div className="h-3 rounded-full bg-zinc-950">
+                    <div
+                      className="h-3 rounded-full bg-white"
+                      style={{
+                        width: `${Math.max(
+                          planDistribution.proPct,
+                          planDistribution.pro > 0 ? 8 : 0
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="mb-2 flex items-center justify-between text-sm">
+                    <span>Studio</span>
+                    <span>
+                      {planDistribution.studio} · {formatPercent(planDistribution.studioPct)}
+                    </span>
+                  </div>
+                  <div className="h-3 rounded-full bg-zinc-950">
+                    <div
+                      className="h-3 rounded-full bg-emerald-400"
+                      style={{
+                        width: `${Math.max(
+                          planDistribution.studioPct,
+                          planDistribution.studio > 0 ? 8 : 0
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {activeTab === "users" && (
+          <>
+            <div className="mt-8 rounded-3xl border border-white/10 bg-zinc-900 p-6">
+              <div className="mb-4 text-xl font-semibold">{isZh ? "用户列表" : "User List"}</div>
+
+              <div className="space-y-4">
+                {users.length === 0 ? (
+                  <div className="rounded-2xl bg-zinc-950 p-6 text-zinc-400">
+                    {isZh ? "没有匹配用户" : "No matching users"}
+                  </div>
+                ) : (
+                  users.map((item) => (
+                    <div key={item.id} className="rounded-2xl bg-zinc-950 p-4">
+                      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                        <div className="min-w-0">
+                          <div className="font-medium">{item.email || "-"}</div>
+                          <div className="mt-1 text-xs text-zinc-500 break-all">{item.id}</div>
+                          {item.admin_note && (
+                            <div className="mt-2 rounded-xl bg-zinc-900 px-3 py-2 text-xs text-zinc-300">
+                              {isZh ? "备注：" : "Note: "} {item.admin_note}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap gap-2 text-xs">
+                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                            {formatPlan(item.plan)}
+                          </div>
+                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                            {isZh ? "额度" : "Quota"}:{" "}
+                            {item.plan === "studio"
+                              ? isZh
+                                ? "无限"
+                                : "Unlimited"
+                              : `${item.used_count} / ${item.monthly_quota}`}
+                          </div>
+                          <div
+                            className={`rounded-full border px-3 py-1 ${
+                              item.status === "banned"
+                                ? "border-red-500/30 text-red-300"
+                                : "border-white/10 text-zinc-300"
+                            }`}
+                          >
+                            {formatUserStatus(item.status)}
+                          </div>
+                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                            {formatTime(item.updated_at)}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <Link
+                          href={`/${locale}/admin/users/${item.id}`}
+                          className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-200"
+                        >
+                          {isZh ? "查看详情" : "View Details"}
+                        </Link>
+                        <button
+                          onClick={() => handlePlanUpdate(item.id, "free")}
+                          disabled={updatingUserId === item.id}
+                          className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-200 disabled:opacity-50"
+                        >
+                          {isZh ? "设为 Free" : "Set Free"}
+                        </button>
+                        <button
+                          onClick={() => handlePlanUpdate(item.id, "pro")}
+                          disabled={updatingUserId === item.id}
+                          className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-200 disabled:opacity-50"
+                        >
+                          {isZh ? "设为 Pro" : "Set Pro"}
+                        </button>
+                        <button
+                          onClick={() => handlePlanUpdate(item.id, "studio")}
+                          disabled={updatingUserId === item.id}
+                          className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-sm text-emerald-300 disabled:opacity-50"
+                        >
+                          {isZh ? "设为 Studio" : "Set Studio"}
+                        </button>
+
+                        {item.status === "banned" ? (
+                          <button
+                            onClick={() => handleStatusUpdate(item.id, "active")}
+                            disabled={updatingUserId === item.id}
+                            className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-sm text-emerald-300 disabled:opacity-50"
+                          >
+                            {isZh ? "解封用户" : "Unban User"}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleStatusUpdate(item.id, "banned")}
+                            disabled={updatingUserId === item.id}
+                            className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-300 disabled:opacity-50"
+                          >
+                            {isZh ? "封禁用户" : "Ban User"}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {renderPagination()}
+          </>
+        )}
+
+        {activeTab === "orders" && (
+          <>
+            <div className="mt-8 rounded-3xl border border-white/10 bg-zinc-900 p-6">
+              <div className="mb-4 text-xl font-semibold">{isZh ? "订单列表" : "Order List"}</div>
+
+              <div className="space-y-4">
+                {orders.length === 0 ? (
+                  <div className="rounded-2xl bg-zinc-950 p-6 text-zinc-400">
+                    {isZh ? "没有匹配订单" : "No matching orders"}
+                  </div>
+                ) : (
+                  orders.map((item) => (
                     <div key={item.id} className="rounded-2xl bg-zinc-950 p-4">
                       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                         <div>
-                          <div className="font-medium">{formatPlan(item.plan)}</div>
-                          <div className="mt-1 text-xs text-zinc-500">{item.email || "-"}</div>
+                          <div className="font-medium">{item.email || "-"}</div>
+                          <div className="mt-1 text-xs text-zinc-500 break-all">{item.id}</div>
                         </div>
+
                         <div className="flex flex-wrap gap-2 text-xs">
                           <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                            {formatPlan(item.plan)}
+                          </div>
+                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
                             {formatMoney(item.amount)}
+                          </div>
+                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                            {item.payment_method}
+                          </div>
+                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                            {formatOrderStatus(item.status)}
+                          </div>
+                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                            {formatTime(item.created_at)}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-4">
+                        <button
+                          onClick={() => handleDeleteOrder(item.id)}
+                          disabled={deletingId === item.id}
+                          className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-300 disabled:opacity-50"
+                        >
+                          {isZh ? "删除订单" : "Delete Order"}
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {renderPagination()}
+          </>
+        )}
+
+        {activeTab === "generations" && (
+          <>
+            <div className="mt-8 rounded-3xl border border-white/10 bg-zinc-900 p-6">
+              <div className="mb-4 text-xl font-semibold">
+                {isZh ? "生成记录列表" : "Generation List"}
+              </div>
+
+              <div className="space-y-4">
+                {generations.length === 0 ? (
+                  <div className="rounded-2xl bg-zinc-950 p-6 text-zinc-400">
+                    {isZh ? "没有匹配生成记录" : "No matching generation records"}
+                  </div>
+                ) : (
+                  generations.map((item) => (
+                    <div key={item.id} className="rounded-2xl bg-zinc-950 p-4">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                        <div>
+                          <div className="font-medium">
+                            {item.file_name || (isZh ? "未命名文件" : "Untitled file")}
+                          </div>
+                          <div className="mt-1 text-xs text-zinc-500 break-all">
+                            {item.email || "-"} · {item.id}
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2 text-xs">
+                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                            {formatPlan(item.plan)}
+                          </div>
+                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                            {isZh ? "消耗" : "Cost"}: {item.quota_cost}
                           </div>
                           <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
                             {item.status}
@@ -1004,220 +1738,176 @@ export default function AdminPage() {
                           </div>
                         </div>
                       </div>
+
+                      <div className="mt-4">
+                        <button
+                          onClick={() => handleDeleteGeneration(item.id)}
+                          disabled={deletingId === item.id}
+                          className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-300 disabled:opacity-50"
+                        >
+                          {isZh ? "删除记录" : "Delete Record"}
+                        </button>
+                      </div>
                     </div>
-                  ))}
-                </div>
-              )}
+                  ))
+                )}
+              </div>
             </div>
+
+            {renderPagination()}
           </>
         )}
 
-        {activeTab === "users" && (
-          <div className="mt-8 rounded-3xl border border-white/10 bg-zinc-900 p-6">
-            <div className="mb-4 text-xl font-semibold">{isZh ? "用户列表" : "User List"}</div>
-            <div className="space-y-4">
-              {filteredProfiles.length === 0 ? (
-                <div className="rounded-2xl bg-zinc-950 p-6 text-zinc-400">
-                  {isZh ? "没有匹配用户" : "No matching users"}
-                </div>
-              ) : (
-                filteredProfiles.map((item) => (
-                  <div key={item.id} className="rounded-2xl bg-zinc-950 p-4">
-                    <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                      <div className="min-w-0">
-                        <div className="font-medium">{item.email || "-"}</div>
-                        <div className="mt-1 text-xs text-zinc-500">{item.id}</div>
-                        {item.admin_note && (
-                          <div className="mt-2 rounded-xl bg-zinc-900 px-3 py-2 text-xs text-zinc-300">
-                            {isZh ? "备注：" : "Note: "} {item.admin_note}
+        {activeTab === "jobs" && (
+          <>
+            <div className="mt-8 rounded-3xl border border-white/10 bg-zinc-900 p-6">
+              <div className="mb-4 text-xl font-semibold">
+                {isZh ? "生成任务列表" : "Generation Jobs"}
+              </div>
+
+              <div className="space-y-4">
+                {jobs.length === 0 ? (
+                  <div className="rounded-2xl bg-zinc-950 p-6 text-zinc-400">
+                    {isZh ? "没有匹配任务" : "No matching jobs"}
+                  </div>
+                ) : (
+                  jobs.map((item) => (
+                    <div key={item.id} className="rounded-2xl bg-zinc-950 p-4">
+                      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                        <div className="min-w-0">
+                          <div className="font-medium">
+                            {item.script_title || (isZh ? "未命名任务" : "Untitled job")}
                           </div>
-                        )}
+                          <div className="mt-1 text-xs text-zinc-500">{item.email || "-"}</div>
+                          <div className="mt-1 text-xs text-zinc-500 break-all">{item.id}</div>
+
+                          {item.error_message && (
+                            <div className="mt-3 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+                              {isZh ? "错误信息：" : "Error: "} {item.error_message}
+                            </div>
+                          )}
+
+                          {item.result_url && (
+                            <div className="mt-3 text-xs">
+                              <a
+                                href={item.result_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-emerald-300 underline"
+                              >
+                                {isZh ? "查看结果链接" : "Open Result URL"}
+                              </a>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap gap-2 text-xs">
+                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                            {formatPlan(item.plan)}
+                          </div>
+                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                            {formatJobStatus(item.status)}
+                          </div>
+                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                            {isZh ? "进度" : "Progress"}: {item.progress}%
+                          </div>
+                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                            {isZh ? "消耗" : "Cost"}: {item.quota_cost}
+                          </div>
+                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                            {formatTime(item.created_at)}
+                          </div>
+                        </div>
                       </div>
 
-                      <div className="flex flex-wrap gap-2 text-xs">
-                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
-                          {formatPlan(item.plan)}
-                        </div>
-                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
-                          {isZh ? "额度" : "Quota"}:{" "}
-                          {item.plan === "studio"
-                            ? isZh
-                              ? "无限"
-                              : "Unlimited"
-                            : `${item.used_count} / ${item.monthly_quota}`}
-                        </div>
-                        <div
-                          className={`rounded-full border px-3 py-1 ${
-                            item.status === "banned"
-                              ? "border-red-500/30 text-red-300"
-                              : "border-white/10 text-zinc-300"
-                          }`}
-                        >
-                          {formatStatus(item.status)}
-                        </div>
-                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
-                          {formatTime(item.updated_at)}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <Link
-                        href={`/${locale}/admin/users/${item.id}`}
-                        className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-200"
-                      >
-                        {isZh ? "查看详情" : "View Details"}
-                      </Link>
-                      <button
-                        onClick={() => handlePlanUpdate(item.id, "free")}
-                        disabled={updatingUserId === item.id}
-                        className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-200 disabled:opacity-50"
-                      >
-                        {isZh ? "设为 Free" : "Set Free"}
-                      </button>
-                      <button
-                        onClick={() => handlePlanUpdate(item.id, "pro")}
-                        disabled={updatingUserId === item.id}
-                        className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-200 disabled:opacity-50"
-                      >
-                        {isZh ? "设为 Pro" : "Set Pro"}
-                      </button>
-                      <button
-                        onClick={() => handlePlanUpdate(item.id, "studio")}
-                        disabled={updatingUserId === item.id}
-                        className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-sm text-emerald-300 disabled:opacity-50"
-                      >
-                        {isZh ? "设为 Studio" : "Set Studio"}
-                      </button>
-                      {item.status === "banned" ? (
+                      <div className="mt-4 flex flex-wrap gap-2">
                         <button
-                          onClick={() => handleStatusUpdate(item.id, "active")}
-                          disabled={updatingUserId === item.id}
+                          onClick={() => handleJobStatusUpdate(item.id, "pending")}
+                          disabled={updatingJobId === item.id}
+                          className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-200 disabled:opacity-50"
+                        >
+                          {isZh ? "重置为等待中" : "Reset Pending"}
+                        </button>
+
+                        <button
+                          onClick={() => handleJobStatusUpdate(item.id, "processing")}
+                          disabled={updatingJobId === item.id}
+                          className="rounded-xl border border-blue-500/30 bg-blue-500/10 px-4 py-2 text-sm text-blue-300 disabled:opacity-50"
+                        >
+                          {isZh ? "标记为生成中" : "Mark Processing"}
+                        </button>
+
+                        <button
+                          onClick={() => handleJobStatusUpdate(item.id, "success")}
+                          disabled={updatingJobId === item.id}
                           className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-sm text-emerald-300 disabled:opacity-50"
                         >
-                          {isZh ? "解封用户" : "Unban User"}
+                          {isZh ? "标记为成功" : "Mark Success"}
                         </button>
-                      ) : (
+
                         <button
-                          onClick={() => handleStatusUpdate(item.id, "banned")}
-                          disabled={updatingUserId === item.id}
+                          onClick={() => handleJobStatusUpdate(item.id, "failed")}
+                          disabled={updatingJobId === item.id}
                           className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-300 disabled:opacity-50"
                         >
-                          {isZh ? "封禁用户" : "Ban User"}
+                          {isZh ? "标记为失败" : "Mark Failed"}
                         </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {renderPagination()}
+          </>
+        )}
+
+        {activeTab === "logs" && (
+          <>
+            <div className="mt-8 rounded-3xl border border-white/10 bg-zinc-900 p-6">
+              <div className="mb-4 text-xl font-semibold">
+                {isZh ? "管理员日志" : "Admin Logs"}
+              </div>
+
+              <div className="space-y-4">
+                {logs.length === 0 ? (
+                  <div className="rounded-2xl bg-zinc-950 p-6 text-zinc-400">
+                    {isZh ? "暂无管理员日志" : "No admin logs yet"}
+                  </div>
+                ) : (
+                  logs.map((item) => (
+                    <div key={item.id} className="rounded-2xl bg-zinc-950 p-4">
+                      <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                        <div className="min-w-0">
+                          <div className="font-medium">{item.action}</div>
+                          <div className="mt-1 text-xs text-zinc-500">
+                            {item.admin_email || "-"}
+                          </div>
+                          <div className="mt-1 text-xs text-zinc-500">
+                            {item.target_type}
+                            {item.target_id ? ` · ${item.target_id}` : ""}
+                          </div>
+                        </div>
+
+                        <div className="rounded-full border border-white/10 px-3 py-1 text-xs text-zinc-300">
+                          {formatTime(item.created_at)}
+                        </div>
+                      </div>
+
+                      {item.detail && (
+                        <pre className="mt-4 overflow-auto rounded-2xl bg-zinc-900 p-4 text-xs text-zinc-300">
+{JSON.stringify(item.detail, null, 2)}
+                        </pre>
                       )}
                     </div>
-                  </div>
-                ))
-              )}
+                  ))
+                )}
+              </div>
             </div>
-          </div>
-        )}
 
-        {activeTab === "orders" && (
-          <div className="mt-8 rounded-3xl border border-white/10 bg-zinc-900 p-6">
-            <div className="mb-4 text-xl font-semibold">{isZh ? "订单列表" : "Order List"}</div>
-            <div className="space-y-4">
-              {filteredOrders.length === 0 ? (
-                <div className="rounded-2xl bg-zinc-950 p-6 text-zinc-400">
-                  {isZh ? "没有匹配订单" : "No matching orders"}
-                </div>
-              ) : (
-                filteredOrders.map((item) => (
-                  <div key={item.id} className="rounded-2xl bg-zinc-950 p-4">
-                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                      <div>
-                        <div className="font-medium">{item.email || "-"}</div>
-                        <div className="mt-1 text-xs text-zinc-500">{item.id}</div>
-                      </div>
-                      <div className="flex flex-wrap gap-2 text-xs">
-                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
-                          {formatPlan(item.plan)}
-                        </div>
-                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
-                          {formatMoney(item.amount)}
-                        </div>
-                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
-                          {item.payment_method}
-                        </div>
-                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
-                          {item.status}
-                        </div>
-                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
-                          {formatTime(item.created_at)}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="mt-4">
-                      <button
-                        onClick={() => handleDeleteOrder(item.id)}
-                        disabled={deletingId === item.id}
-                        className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-300 disabled:opacity-50"
-                      >
-                        {isZh ? "删除订单" : "Delete Order"}
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        )}
-
-        {activeTab === "generations" && (
-          <div className="mt-8 rounded-3xl border border-white/10 bg-zinc-900 p-6">
-            <div className="mb-4 text-xl font-semibold">
-              {isZh ? "生成记录列表" : "Generation List"}
-            </div>
-            <div className="space-y-4">
-              {filteredGenerations.length === 0 ? (
-                <div className="rounded-2xl bg-zinc-950 p-6 text-zinc-400">
-                  {isZh ? "没有匹配生成记录" : "No matching generation records"}
-                </div>
-              ) : (
-                filteredGenerations.map((item) => (
-                  <div key={item.id} className="rounded-2xl bg-zinc-950 p-4">
-                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                      <div>
-                        <div className="font-medium">
-                          {item.file_name || (isZh ? "未命名文件" : "Untitled file")}
-                        </div>
-                        <div className="mt-1 text-xs text-zinc-500">
-                          {item.email || "-"} · {item.id}
-                        </div>
-                      </div>
-
-                      <div className="flex flex-wrap gap-2 text-xs">
-                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
-                          {formatPlan(item.plan)}
-                        </div>
-                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
-                          {isZh ? "消耗" : "Cost"}: {item.quota_cost}
-                        </div>
-                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
-                          {item.status}
-                        </div>
-                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
-                          {formatTime(item.created_at)}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="mt-4">
-                      <button
-                        onClick={() => handleDeleteGeneration(item.id)}
-                        disabled={deletingId === item.id}
-                        className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-300 disabled:opacity-50"
-                      >
-                        {isZh ? "删除记录" : "Delete Record"}
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
+            {renderPagination()}
+          </>
         )}
 
         {activeTab === "grant" && (
@@ -1273,7 +1963,11 @@ export default function AdminPage() {
                 <input
                   value={grantMethod}
                   onChange={(e) => setGrantMethod(e.target.value)}
-                  placeholder={isZh ? "例如 manual_grant / offline / wechat_manual" : "For example manual_grant / offline / wechat_manual"}
+                  placeholder={
+                    isZh
+                      ? "例如 manual_grant / offline / wechat_manual"
+                      : "For example manual_grant / offline / wechat_manual"
+                  }
                   className="h-11 w-full rounded-xl border border-white/10 bg-zinc-900 px-4 text-sm text-white outline-none placeholder:text-zinc-500"
                 />
               </div>
@@ -1281,8 +1975,8 @@ export default function AdminPage() {
 
             <div className="mt-6 rounded-2xl bg-zinc-950 p-5 text-sm text-zinc-400">
               {isZh
-                ? "说明：执行后会同时更新用户套餐，并自动写入一条 paid 订单记录。适合人工收款、赠送体验或补单场景。"
-                : "Note: This updates the user's plan and also inserts a paid order record. Good for offline payments, gifts, or manual fulfillment."}
+                ? "说明：执行后会同时更新用户套餐，并自动写入一条订单记录。适合人工收款、赠送体验或补单场景。"
+                : "Note: This updates the user's plan and also inserts an order record. Good for offline payments, gifts, or manual fulfillment."}
             </div>
 
             <div className="mt-6">
