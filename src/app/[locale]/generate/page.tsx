@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import LanguageSwitch from "@/components/LanguageSwitch";
 import BackButton from "@/components/BackButton";
 import { supabase } from "@/lib/supabase";
+import { logActivity } from "@/lib/activity";
 
 type ProfileRow = {
   id: string;
@@ -14,12 +15,21 @@ type ProfileRow = {
   monthly_quota: number;
   used_count: number;
   status: string;
+  role?: string;
 };
 
 type StoryboardItem = {
   shot: number;
   title: string;
   desc: string;
+};
+
+type StepLogItem = {
+  key: string;
+  label: string;
+  status: "pending" | "processing" | "success" | "failed";
+  progress: number;
+  updatedAt: string;
 };
 
 type StructuredResultPayload = {
@@ -217,6 +227,36 @@ async function readTextFile(file: File) {
   return await file.text();
 }
 
+function buildStepLogs(
+  isZh: boolean,
+  processingIndex: number,
+  failedIndex?: number
+): StepLogItem[] {
+  const labels = isZh
+    ? ["创建任务", "读取剧本", "解析人物", "生成分镜", "整理结果", "写入任务结果"]
+    : ["Create Job", "Read Script", "Parse Characters", "Build Storyboard", "Prepare Output", "Save Result"];
+
+  return labels.map((label, index) => {
+    let status: StepLogItem["status"] = "pending";
+
+    if (typeof failedIndex === "number") {
+      if (index < failedIndex) status = "success";
+      else if (index === failedIndex) status = "failed";
+    } else {
+      if (index < processingIndex) status = "success";
+      else if (index === processingIndex) status = "processing";
+    }
+
+    return {
+      key: `step_${index + 1}`,
+      label,
+      status,
+      progress: Math.round(((index + 1) / labels.length) * 100),
+      updatedAt: new Date().toISOString(),
+    };
+  });
+}
+
 export default function GeneratePage() {
   const pathname = usePathname();
   const router = useRouter();
@@ -259,7 +299,7 @@ export default function GeneratePage() {
 
     const { data } = await supabase
       .from("profiles")
-      .select("id,email,plan,monthly_quota,used_count,status")
+      .select("id,email,plan,monthly_quota,used_count,status,role")
       .eq("id", user.id)
       .maybeSingle();
 
@@ -268,12 +308,17 @@ export default function GeneratePage() {
     }
 
     const draft = loadDraftScript();
-    if (draft.text) {
-      setScriptText(draft.text);
-    }
-    if (draft.fileName) {
-      setLoadedFileName(draft.fileName);
-    }
+    if (draft.text) setScriptText(draft.text);
+    if (draft.fileName) setLoadedFileName(draft.fileName);
+
+    await logActivity({
+      userId: user.id,
+      actorEmail: user.email,
+      actionType: "generate_page_opened",
+      targetType: "page",
+      targetId: "/generate",
+      message: "Opened generate page",
+    });
   }
 
   async function handleFileSelect(file: File) {
@@ -304,6 +349,21 @@ export default function GeneratePage() {
       setScriptText(text);
       setLoadedFileName(file.name);
       saveDraftScript(text, file.name);
+
+      if (profile?.id) {
+        await logActivity({
+          userId: profile.id,
+          actorEmail: profile.email,
+          actionType: "script_uploaded_on_generate_page",
+          targetType: "file",
+          targetId: file.name,
+          message: "Uploaded script file on generate page",
+          metadata: {
+            fileName: file.name,
+            size: file.size,
+          },
+        });
+      }
     } catch (error) {
       setErrorMessage(
         error instanceof Error
@@ -329,7 +389,8 @@ export default function GeneratePage() {
     nextProgress: number,
     nextResultUrl?: string | null,
     nextErrorMessage?: string | null,
-    nextResultJson?: StructuredResultPayload | null
+    nextResultJson?: StructuredResultPayload | null,
+    nextStepLogs?: StepLogItem[] | null
   ) {
     await supabase.rpc("update_generation_job_progress", {
       target_job_id: targetJobId,
@@ -338,6 +399,7 @@ export default function GeneratePage() {
       next_result_url: nextResultUrl ?? null,
       next_error_message: nextErrorMessage ?? null,
       next_result_json: nextResultJson ?? null,
+      next_step_logs: nextStepLogs ?? null,
     });
   }
 
@@ -375,36 +437,72 @@ export default function GeneratePage() {
       createdJobId = data as string;
       setJobId(createdJobId);
 
+      if (profile?.id) {
+        await logActivity({
+          userId: profile.id,
+          actorEmail: profile.email,
+          actionType: "generation_started",
+          targetType: "generation_job",
+          targetId: createdJobId,
+          message: "Started a generation job",
+          metadata: {
+            scriptTitle: payload.title,
+            fileName: loadedFileName || null,
+          },
+        });
+      }
+
+      const step0 = buildStepLogs(isZh, 0);
       setProgress(8);
       setCurrentStep(0);
+      await updateJob(createdJobId, "processing", 8, null, null, null, step0);
       await sleep(400);
 
+      const step1 = buildStepLogs(isZh, 1);
       setProgress(18);
       setCurrentStep(1);
-      await updateJob(createdJobId, "processing", 18);
+      await updateJob(createdJobId, "processing", 18, null, null, null, step1);
       await sleep(600);
 
+      const step2 = buildStepLogs(isZh, 2);
       setProgress(36);
       setCurrentStep(2);
-      await updateJob(createdJobId, "processing", 36);
+      await updateJob(createdJobId, "processing", 36, null, null, null, step2);
       await sleep(700);
 
+      const step3 = buildStepLogs(isZh, 3);
       setProgress(58);
       setCurrentStep(3);
-      await updateJob(createdJobId, "processing", 58);
+      await updateJob(createdJobId, "processing", 58, null, null, null, step3);
       await sleep(700);
 
+      const step4 = buildStepLogs(isZh, 4);
       setProgress(78);
       setCurrentStep(4);
-      await updateJob(createdJobId, "processing", 78);
+      await updateJob(createdJobId, "processing", 78, null, null, null, step4);
       await sleep(700);
 
       const resultUrl = `/${locale}/result?job=${createdJobId}`;
+      const step5 = buildStepLogs(isZh, 6);
 
       setProgress(100);
       setCurrentStep(5);
 
-      await updateJob(createdJobId, "success", 100, resultUrl, null, payload);
+      await updateJob(createdJobId, "success", 100, resultUrl, null, payload, step5);
+
+      if (profile?.id) {
+        await logActivity({
+          userId: profile.id,
+          actorEmail: profile.email,
+          actionType: "generation_succeeded",
+          targetType: "generation_job",
+          targetId: createdJobId,
+          message: "Generation job completed successfully",
+          metadata: {
+            resultUrl,
+          },
+        });
+      }
 
       router.push(resultUrl);
     } catch (error) {
@@ -418,7 +516,19 @@ export default function GeneratePage() {
       setErrorMessage(message);
 
       if (createdJobId) {
-        await updateJob(createdJobId, "failed", progress || 0, null, message, null);
+        const failedSteps = buildStepLogs(isZh, 0, Math.max(currentStep, 0));
+        await updateJob(createdJobId, "failed", progress || 0, null, message, null, failedSteps);
+      }
+
+      if (profile?.id) {
+        await logActivity({
+          userId: profile.id,
+          actorEmail: profile.email,
+          actionType: "generation_failed",
+          targetType: "generation_job",
+          targetId: createdJobId || null,
+          message,
+        });
       }
     } finally {
       setSubmitting(false);
@@ -439,8 +549,8 @@ export default function GeneratePage() {
       : "Loading account...";
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-white">
-      <header className="sticky top-0 z-30 border-b border-white/10 bg-zinc-950/80 backdrop-blur">
+    <main className="min-h-screen bg-[#06070a] text-white">
+      <header className="sticky top-0 z-30 border-b border-white/10 bg-[#06070a]/80 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3">
             <BackButton fallbackHref={`/${locale}`} />
@@ -455,13 +565,13 @@ export default function GeneratePage() {
           <div className="flex items-center gap-3">
             <Link
               href={`/${locale}/jobs`}
-              className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-300 transition hover:bg-white/5"
+              className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-zinc-300 transition hover:bg-white/[0.07]"
             >
               {isZh ? "我的任务" : "My Jobs"}
             </Link>
             <Link
               href={`/${locale}/account`}
-              className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-300 transition hover:bg-white/5"
+              className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-zinc-300 transition hover:bg-white/[0.07]"
             >
               {isZh ? "账户中心" : "Account"}
             </Link>

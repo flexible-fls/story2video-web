@@ -7,6 +7,14 @@ import LanguageSwitch from "@/components/LanguageSwitch";
 import BackButton from "@/components/BackButton";
 import { supabase } from "@/lib/supabase";
 
+type StepLogItem = {
+  key: string;
+  label: string;
+  status: "pending" | "processing" | "success" | "failed";
+  progress: number;
+  updatedAt: string;
+};
+
 type GenerationJobRow = {
   id: string;
   user_id: string;
@@ -19,6 +27,7 @@ type GenerationJobRow = {
   error_message: string | null;
   plan: string;
   quota_cost: number;
+  step_logs: StepLogItem[] | null;
   created_at: string;
   updated_at: string;
 };
@@ -38,6 +47,7 @@ export default function JobsPage() {
   const [rangeFilter, setRangeFilter] = useState<RangeKey>("all");
   const [refreshing, setRefreshing] = useState(false);
   const [userEmail, setUserEmail] = useState("");
+  const [expandedJobId, setExpandedJobId] = useState("");
 
   useEffect(() => {
     bootstrap();
@@ -146,15 +156,9 @@ export default function JobsPage() {
   }
 
   function getStatusStyle(status: string) {
-    if (status === "success") {
-      return "border-emerald-400/20 bg-emerald-400/10 text-emerald-300";
-    }
-    if (status === "failed") {
-      return "border-red-500/20 bg-red-500/10 text-red-300";
-    }
-    if (status === "processing") {
-      return "border-blue-500/20 bg-blue-500/10 text-blue-300";
-    }
+    if (status === "success") return "border-emerald-400/20 bg-emerald-400/10 text-emerald-300";
+    if (status === "failed") return "border-red-500/20 bg-red-500/10 text-red-300";
+    if (status === "processing") return "border-blue-500/20 bg-blue-500/10 text-blue-300";
     return "border-white/10 bg-white/[0.03] text-zinc-300";
   }
 
@@ -251,35 +255,23 @@ export default function JobsPage() {
                 : "Every generation enters the jobs center. Track status, progress, failure reasons, and result links in a workflow built for continuous creation."}
             </p>
 
-            <div className="mt-8 flex flex-wrap gap-3">
-              <div className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-zinc-300">
-                {isZh ? "任务状态" : "Job Status"}
-              </div>
-              <div className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-zinc-300">
-                {isZh ? "进度跟踪" : "Progress Tracking"}
-              </div>
-              <div className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-zinc-300">
-                {isZh ? "结果入口" : "Result Access"}
-              </div>
-            </div>
-
             <div className="mt-10 grid gap-4 sm:grid-cols-4">
-              <div className="rounded-[28px] border border-white/10 bg-gradient-to-b from-white/[0.06] to-white/[0.03] p-5 shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
+              <div className="rounded-[28px] border border-white/10 bg-gradient-to-b from-white/[0.06] to-white/[0.03] p-5">
                 <div className="text-sm text-zinc-400">{isZh ? "总任务" : "Total Jobs"}</div>
                 <div className="mt-3 text-3xl font-bold text-white">{filteredJobs.length}</div>
               </div>
 
-              <div className="rounded-[28px] border border-emerald-400/15 bg-gradient-to-b from-emerald-400/10 to-zinc-950 p-5 shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
+              <div className="rounded-[28px] border border-emerald-400/15 bg-gradient-to-b from-emerald-400/10 to-zinc-950 p-5">
                 <div className="text-sm text-zinc-400">{isZh ? "成功" : "Success"}</div>
                 <div className="mt-3 text-3xl font-bold text-white">{successCount}</div>
               </div>
 
-              <div className="rounded-[28px] border border-blue-400/15 bg-gradient-to-b from-blue-400/10 to-zinc-950 p-5 shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
+              <div className="rounded-[28px] border border-blue-400/15 bg-gradient-to-b from-blue-400/10 to-zinc-950 p-5">
                 <div className="text-sm text-zinc-400">{isZh ? "进行中" : "Processing"}</div>
                 <div className="mt-3 text-3xl font-bold text-white">{processingCount}</div>
               </div>
 
-              <div className="rounded-[28px] border border-red-400/15 bg-gradient-to-b from-red-400/10 to-zinc-950 p-5 shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
+              <div className="rounded-[28px] border border-red-400/15 bg-gradient-to-b from-red-400/10 to-zinc-950 p-5">
                 <div className="text-sm text-zinc-400">{isZh ? "失败" : "Failed"}</div>
                 <div className="mt-3 text-3xl font-bold text-white">{failedCount}</div>
               </div>
@@ -288,7 +280,7 @@ export default function JobsPage() {
 
           <div className="relative">
             <div className="absolute inset-0 rounded-[32px] bg-gradient-to-br from-emerald-400/10 via-transparent to-cyan-400/10 blur-xl" />
-            <div className="relative rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900/95 to-zinc-950/95 p-6 shadow-[0_20px_80px_rgba(0,0,0,0.45)]">
+            <div className="relative rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900/95 to-zinc-950/95 p-6">
               <div className="text-3xl font-bold text-white">
                 {isZh ? "筛选与搜索" : "Search & Filters"}
               </div>
@@ -348,25 +340,7 @@ export default function JobsPage() {
                 </div>
               </div>
 
-              <div className="mt-4 rounded-[24px] border border-white/8 bg-black/40 p-5">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <div className="text-sm text-zinc-400">{isZh ? "当前分布" : "Current Summary"}</div>
-                  <div className="text-sm text-zinc-300">
-                    {isZh ? `等待中 ${pendingCount} · 进行中 ${processingCount}` : `Pending ${pendingCount} · Processing ${processingCount}`}
-                  </div>
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3 text-sm text-zinc-200">
-                    {isZh ? `成功任务：${successCount}` : `Success: ${successCount}`}
-                  </div>
-                  <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3 text-sm text-zinc-200">
-                    {isZh ? `失败任务：${failedCount}` : `Failed: ${failedCount}`}
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-6 flex flex-wrap gap-3">
+              <div className="mt-4 flex flex-wrap gap-3">
                 <button
                   onClick={() => loadJobs()}
                   disabled={refreshing}
@@ -394,55 +368,21 @@ export default function JobsPage() {
       </section>
 
       <section className="mx-auto max-w-7xl px-6 py-12">
-        <div className="rounded-[32px] border border-white/10 bg-gradient-to-r from-zinc-900/90 via-zinc-900/80 to-zinc-900/90 p-8 shadow-[0_10px_40px_rgba(0,0,0,0.25)]">
-          <div className="max-w-4xl">
-            <div className="text-sm font-medium text-emerald-300">
-              {isZh ? "任务说明" : "Why Jobs Matter"}
+        <div className="space-y-6">
+          {filteredJobs.length === 0 ? (
+            <div className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-10 text-center">
+              <div className="text-2xl font-bold text-white">
+                {isZh ? "暂无符合条件的任务" : "No matching jobs found"}
+              </div>
+              <div className="mt-3 text-zinc-400">
+                {isZh ? "你可以调整筛选条件，或者直接创建新的生成任务。" : "Try adjusting the filters or create a new generation job."}
+              </div>
             </div>
-            <h2 className="mt-3 text-4xl font-bold leading-tight text-white">
-              {isZh ? "不再是一次性跳转，而是可追踪的创作流程" : "Not a one-off page jump, but a trackable creative workflow"}
-            </h2>
-            <p className="mt-4 text-base leading-8 text-zinc-300">
-              {isZh
-                ? "通过任务中心，你可以把每一次生成都作为独立工作项管理。未来无论你接入图片生成、配音生成还是视频合成，都可以继续沿用这一套任务流程。"
-                : "With the jobs center, every generation becomes a managed work item. Later, image generation, voice generation, and video composition can all continue within the same workflow."}
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section className="mx-auto max-w-7xl px-6 py-12">
-        <div className="mb-8">
-          <div className="text-sm font-medium text-emerald-300">{isZh ? "任务列表" : "Job List"}</div>
-          <h2 className="mt-3 text-4xl font-bold text-white">
-            {isZh ? "你的全部任务" : "All of your jobs"}
-          </h2>
-        </div>
-
-        {filteredJobs.length === 0 ? (
-          <div className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-10 text-center">
-            <div className="text-2xl font-bold text-white">
-              {isZh ? "暂无符合条件的任务" : "No matching jobs found"}
-            </div>
-            <div className="mt-3 text-zinc-400">
-              {isZh ? "你可以调整筛选条件，或者直接创建新的生成任务。"
- : "Try adjusting the filters or create a new generation job."}
-            </div>
-            <div className="mt-6">
-              <Link
-                href={`/${locale}/generate`}
-                className="rounded-2xl bg-emerald-400 px-6 py-3 text-sm font-semibold text-black"
-              >
-                {isZh ? "去生成" : "Create Now"}
-              </Link>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {filteredJobs.map((item) => (
+          ) : (
+            filteredJobs.map((item) => (
               <div
                 key={item.id}
-                className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-6 shadow-[0_10px_30px_rgba(0,0,0,0.22)]"
+                className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-6"
               >
                 <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
                   <div className="min-w-0 flex-1">
@@ -465,18 +405,9 @@ export default function JobsPage() {
                       <div className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-zinc-300">
                         {isZh ? "创建时间" : "Created"}: {formatTime(item.created_at)}
                       </div>
-                      <div className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-zinc-300">
-                        {isZh ? "更新时间" : "Updated"}: {formatTime(item.updated_at)}
-                      </div>
                     </div>
 
-                    <div className="mt-3 break-all text-sm text-zinc-500">
-                      {item.id}
-                    </div>
-
-                    {item.email && (
-                      <div className="mt-2 text-sm text-zinc-400">{item.email}</div>
-                    )}
+                    <div className="mt-3 break-all text-sm text-zinc-500">{item.id}</div>
 
                     {item.error_message && (
                       <div className="mt-4 rounded-[24px] border border-red-500/20 bg-red-500/10 px-4 py-4 text-sm leading-7 text-red-300">
@@ -484,6 +415,41 @@ export default function JobsPage() {
                         <div className="mt-2">{item.error_message}</div>
                       </div>
                     )}
+
+                    {item.step_logs && item.step_logs.length > 0 && expandedJobId === item.id ? (
+                      <div className="mt-4 rounded-[24px] border border-white/8 bg-black/25 p-5">
+                        <div className="mb-4 text-sm font-semibold text-zinc-300">
+                          {isZh ? "任务步骤明细" : "Job Step Details"}
+                        </div>
+
+                        <div className="space-y-3">
+                          {item.step_logs.map((step) => (
+                            <div
+                              key={step.key}
+                              className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3"
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="text-sm text-zinc-200">{step.label}</div>
+                                <div
+                                  className={`rounded-full px-3 py-1 text-xs ${
+                                    step.status === "success"
+                                      ? "bg-emerald-400/10 text-emerald-300"
+                                      : step.status === "failed"
+                                      ? "bg-red-500/10 text-red-300"
+                                      : step.status === "processing"
+                                      ? "bg-blue-500/10 text-blue-300"
+                                      : "bg-white/[0.05] text-zinc-300"
+                                  }`}
+                                >
+                                  {step.status}
+                                </div>
+                              </div>
+                              <div className="mt-2 text-xs text-zinc-500">{formatTime(step.updatedAt)}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
 
                   <div className="w-full xl:w-[340px]">
@@ -502,7 +468,7 @@ export default function JobsPage() {
                         />
                       </div>
 
-                      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                      <div className="mt-4 grid gap-3">
                         {item.status === "success" ? (
                           <Link
                             href={`/${locale}/result?job=${item.id}`}
@@ -512,16 +478,18 @@ export default function JobsPage() {
                           </Link>
                         ) : null}
 
-                        {item.result_url ? (
-                          <a
-                            href={item.result_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-center text-sm font-medium text-zinc-200"
-                          >
-                            {isZh ? "打开结果链接" : "Open Result URL"}
-                          </a>
-                        ) : null}
+                        <button
+                          onClick={() => setExpandedJobId(expandedJobId === item.id ? "" : item.id)}
+                          className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-center text-sm font-medium text-zinc-200"
+                        >
+                          {expandedJobId === item.id
+                            ? isZh
+                              ? "收起步骤明细"
+                              : "Hide Steps"
+                            : isZh
+                            ? "查看步骤明细"
+                            : "View Steps"}
+                        </button>
 
                         <Link
                           href={`/${locale}/generate`}
@@ -534,45 +502,8 @@ export default function JobsPage() {
                   </div>
                 </div>
               </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section className="mx-auto max-w-7xl px-6 py-20">
-        <div className="relative overflow-hidden rounded-[36px] border border-emerald-400/20 bg-gradient-to-br from-emerald-400/15 via-emerald-400/10 to-cyan-400/10 p-10 text-center shadow-[0_20px_80px_rgba(16,185,129,0.08)]">
-          <div className="absolute left-0 top-0 h-40 w-40 rounded-full bg-emerald-400/10 blur-3xl" />
-          <div className="absolute bottom-0 right-0 h-40 w-40 rounded-full bg-cyan-400/10 blur-3xl" />
-
-          <div className="relative text-sm font-medium text-emerald-200">
-            {isZh ? "继续创作" : "Keep Creating"}
-          </div>
-
-          <h2 className="relative mt-3 text-4xl font-bold leading-tight text-white md:text-5xl">
-            {isZh ? "继续创建新任务，让内容生产持续推进" : "Create new jobs and keep your production workflow moving"}
-          </h2>
-
-          <p className="relative mx-auto mt-4 max-w-3xl text-base leading-8 text-zinc-200">
-            {isZh
-              ? "从剧本解析到结果查看，任务中心会持续承接你的创作流程。"
-              : "From script parsing to result review, the jobs center keeps your workflow moving in one place."}
-          </p>
-
-          <div className="relative mt-8 flex flex-wrap items-center justify-center gap-4">
-            <Link
-              href={`/${locale}/generate`}
-              className="rounded-2xl bg-black px-6 py-3 text-sm font-semibold text-white transition hover:bg-zinc-800"
-            >
-              {isZh ? "新建生成任务" : "Create New Job"}
-            </Link>
-
-            <Link
-              href={`/${locale}/history`}
-              className="rounded-2xl border border-white/20 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/[0.05]"
-            >
-              {isZh ? "查看历史记录" : "Open History"}
-            </Link>
-          </div>
+            ))
+          )}
         </div>
       </section>
     </main>
