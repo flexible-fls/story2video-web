@@ -25,6 +25,8 @@ type ProfileRow = {
   monthly_quota: number;
   used_count: number;
   status: string;
+  note?: string;
+  user_tag?: string;
   updated_at: string;
 };
 
@@ -70,6 +72,8 @@ export default function LocalizedHome() {
           monthly_quota: 5,
           used_count: 0,
           status: "active",
+          note: "",
+          user_tag: "normal",
           updated_at: new Date().toISOString(),
         });
       }
@@ -172,6 +176,8 @@ export default function LocalizedHome() {
           monthly_quota: currentPlan === "studio" ? 999999 : currentQuota,
           used_count: nextUsedCount,
           status: currentProfile?.status || "active",
+          note: currentProfile?.note || "",
+          user_tag: currentProfile?.user_tag || "normal",
           updated_at: new Date().toISOString(),
         },
         {
@@ -516,6 +522,16 @@ export default function LocalizedHome() {
                 {profile?.status === "banned" && (
                   <div className="rounded-full border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-300">
                     {locale === "zh" ? "账号已被限制" : "Account Restricted"}
+                  </div>
+                )}
+                {profile?.user_tag === "whitelist" && (
+                  <div className="rounded-full border border-blue-500/30 bg-blue-500/10 px-4 py-2 text-sm text-blue-300">
+                    {locale === "zh" ? "白名单用户" : "Whitelisted"}
+                  </div>
+                )}
+                {profile?.user_tag === "blacklist" && (
+                  <div className="rounded-full border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-300">
+                    {locale === "zh" ? "黑名单用户" : "Blacklisted"}
                   </div>
                 )}
               </div>

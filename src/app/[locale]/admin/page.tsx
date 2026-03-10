@@ -13,6 +13,8 @@ type ProfileRow = {
   monthly_quota: number;
   used_count: number;
   status: string;
+  note?: string;
+  user_tag?: string;
   updated_at: string;
 };
 
@@ -169,6 +171,7 @@ export default function AdminPage() {
           ? {
               ...item,
               status: nextStatus,
+              user_tag: nextStatus === "banned" ? "blacklist" : item.user_tag,
               updated_at: new Date().toISOString(),
             }
           : item
@@ -329,12 +332,22 @@ export default function AdminPage() {
     [isZh]
   );
 
+  const formatTag = useMemo(
+    () => (tag?: string) => {
+      if (tag === "whitelist") return isZh ? "白名单" : "Whitelist";
+      if (tag === "blacklist") return isZh ? "黑名单" : "Blacklist";
+      return isZh ? "普通" : "Normal";
+    },
+    [isZh]
+  );
+
   const normalizedSearch = search.trim().toLowerCase();
 
   const filteredProfiles = profiles.filter((item) => {
     const matchesSearch =
       !normalizedSearch ||
       (item.email || "").toLowerCase().includes(normalizedSearch) ||
+      (item.note || "").toLowerCase().includes(normalizedSearch) ||
       item.id.toLowerCase().includes(normalizedSearch);
 
     const matchesPlan = planFilter === "all" || item.plan === planFilter;
@@ -411,8 +424,8 @@ export default function AdminPage() {
 
           <p className="mt-3 text-zinc-400">
             {isZh
-              ? "查看全站用户、订单、生成情况，并支持搜索、筛选、改套餐、补单、封禁和删除测试数据。"
-              : "Review platform users, orders, and generations with search, filters, plan edits, grants, bans, and cleanup tools."}
+              ? "查看全站用户、订单、生成情况，并支持搜索、筛选、改套餐、补单、封禁、删除测试数据和标签备注管理。"
+              : "Review platform users, orders, and generations with search, filters, plan edits, grants, bans, cleanup tools, and tag/note management."}
           </p>
         </div>
 
@@ -497,7 +510,7 @@ export default function AdminPage() {
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder={isZh ? "搜索邮箱 / 文件名 / ID" : "Search email / file / ID"}
+                placeholder={isZh ? "搜索邮箱 / 文件名 / 备注 / ID" : "Search email / file / note / ID"}
                 className="h-10 rounded-xl border border-white/10 bg-zinc-950 px-4 text-sm text-white outline-none placeholder:text-zinc-500"
               />
               <select
@@ -619,9 +632,14 @@ export default function AdminPage() {
                 filteredProfiles.map((item) => (
                   <div key={item.id} className="rounded-2xl bg-zinc-950 p-4">
                     <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-                      <div>
+                      <div className="min-w-0">
                         <div className="font-medium">{item.email || "-"}</div>
                         <div className="mt-1 text-xs text-zinc-500">{item.id}</div>
+                        {item.note && (
+                          <div className="mt-2 text-sm text-zinc-400">
+                            {isZh ? "备注：" : "Note: "} {item.note}
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex flex-wrap gap-2 text-xs">
@@ -644,6 +662,17 @@ export default function AdminPage() {
                           }`}
                         >
                           {formatStatus(item.status)}
+                        </div>
+                        <div
+                          className={`rounded-full border px-3 py-1 ${
+                            item.user_tag === "whitelist"
+                              ? "border-blue-500/30 text-blue-300"
+                              : item.user_tag === "blacklist"
+                              ? "border-red-500/30 text-red-300"
+                              : "border-white/10 text-zinc-300"
+                          }`}
+                        >
+                          {formatTag(item.user_tag)}
                         </div>
                         <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
                           {formatTime(item.updated_at)}

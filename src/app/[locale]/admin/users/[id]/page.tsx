@@ -13,6 +13,8 @@ type ProfileRow = {
   monthly_quota: number;
   used_count: number;
   status: string;
+  note?: string;
+  user_tag?: string;
   updated_at: string;
 };
 
@@ -54,6 +56,8 @@ export default function AdminUserDetailPage() {
   const [actionMessage, setActionMessage] = useState("");
   const [updating, setUpdating] = useState(false);
   const [deletingId, setDeletingId] = useState("");
+  const [noteInput, setNoteInput] = useState("");
+  const [tagInput, setTagInput] = useState<"normal" | "whitelist" | "blacklist">("normal");
 
   useEffect(() => {
     loadUserDetail();
@@ -89,7 +93,11 @@ export default function AdminUserDetailPage() {
         supabase.from("generations").select("*").eq("user_id", userId).order("created_at", { ascending: false }),
       ]);
 
-    setProfile((profileData as ProfileRow) || null);
+    const p = (profileData as ProfileRow) || null;
+    setProfile(p);
+    setNoteInput(p?.note || "");
+    setTagInput((p?.user_tag as "normal" | "whitelist" | "blacklist") || "normal");
+
     setOrders((orderData as OrderRow[]) || []);
     setGenerations((generationData as GenerationRow[]) || []);
     setLoading(false);
@@ -117,8 +125,13 @@ export default function AdminUserDetailPage() {
     setProfile({
       ...profile,
       status: nextStatus,
+      user_tag: nextStatus === "banned" ? "blacklist" : profile.user_tag,
       updated_at: new Date().toISOString(),
     });
+
+    if (nextStatus === "banned") {
+      setTagInput("blacklist");
+    }
 
     setActionMessage(
       isZh
@@ -130,6 +143,38 @@ export default function AdminUserDetailPage() {
         : "User has been restored to active status"
     );
 
+    setUpdating(false);
+  }
+
+  async function handleMetaSave() {
+    if (!profile) return;
+
+    setUpdating(true);
+    setActionMessage("");
+
+    const { error } = await supabase.rpc("admin_update_user_meta", {
+      target_user_id: profile.id,
+      target_note: noteInput,
+      target_user_tag: tagInput,
+    });
+
+    if (error) {
+      setActionMessage(
+        isZh ? `保存失败：${error.message}` : `Save failed: ${error.message}`
+      );
+      setUpdating(false);
+      return;
+    }
+
+    setProfile({
+      ...profile,
+      note: noteInput,
+      user_tag: tagInput,
+      status: tagInput === "blacklist" ? "banned" : "active",
+      updated_at: new Date().toISOString(),
+    });
+
+    setActionMessage(isZh ? "备注和标签已保存" : "Note and tag saved");
     setUpdating(false);
   }
 
@@ -222,6 +267,15 @@ export default function AdminUserDetailPage() {
     [isZh]
   );
 
+  const formatTag = useMemo(
+    () => (tag?: string) => {
+      if (tag === "whitelist") return isZh ? "白名单" : "Whitelist";
+      if (tag === "blacklist") return isZh ? "黑名单" : "Blacklist";
+      return isZh ? "普通" : "Normal";
+    },
+    [isZh]
+  );
+
   if (loading) {
     return (
       <main className="min-h-screen bg-zinc-950 text-white">
@@ -266,8 +320,8 @@ export default function AdminUserDetailPage() {
           </h1>
           <p className="mt-3 text-zinc-400">
             {isZh
-              ? "查看该用户的当前套餐、账户状态、订单历史和生成记录。"
-              : "Review this user's plan, account status, order history, and generation records."}
+              ? "查看该用户的当前套餐、账户状态、订单历史、生成记录和运营备注。"
+              : "Review this user's plan, account status, order history, generation records, and internal notes."}
           </p>
         </div>
 
@@ -321,6 +375,11 @@ export default function AdminUserDetailPage() {
                       {formatStatus(profile.status)}
                     </div>
                   </div>
+
+                  <div className="rounded-2xl bg-zinc-950 p-5 md:col-span-2">
+                    <div className="text-sm text-zinc-400">{isZh ? "用户标签" : "User Tag"}</div>
+                    <div className="mt-2 font-medium">{formatTag(profile.user_tag)}</div>
+                  </div>
                 </div>
 
                 <div className="mt-5 flex flex-wrap gap-3">
@@ -348,19 +407,47 @@ export default function AdminUserDetailPage() {
 
           <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6">
             <div className="mb-4 text-xl font-semibold">
-              {isZh ? "统计摘要" : "Summary"}
+              {isZh ? "备注与标签" : "Note & Tag"}
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-4">
               <div className="rounded-2xl bg-zinc-950 p-5">
-                <div className="text-sm text-zinc-400">{isZh ? "订单数" : "Order Count"}</div>
-                <div className="mt-2 text-3xl font-bold">{orders.length}</div>
+                <label className="mb-2 block text-sm text-zinc-400">
+                  {isZh ? "内部备注" : "Internal Note"}
+                </label>
+                <textarea
+                  value={noteInput}
+                  onChange={(e) => setNoteInput(e.target.value)}
+                  rows={5}
+                  className="w-full rounded-xl border border-white/10 bg-zinc-900 px-4 py-3 text-sm text-white outline-none"
+                  placeholder={isZh ? "写下这个用户的情况，例如：大客户 / 测试号 / 需重点跟进" : "Write notes for this user, e.g. VIP / testing account / follow up"}
+                />
               </div>
 
               <div className="rounded-2xl bg-zinc-950 p-5">
-                <div className="text-sm text-zinc-400">{isZh ? "生成次数" : "Generation Count"}</div>
-                <div className="mt-2 text-3xl font-bold">{generations.length}</div>
+                <label className="mb-2 block text-sm text-zinc-400">
+                  {isZh ? "用户标签" : "User Tag"}
+                </label>
+                <select
+                  value={tagInput}
+                  onChange={(e) =>
+                    setTagInput(e.target.value as "normal" | "whitelist" | "blacklist")
+                  }
+                  className="h-11 w-full rounded-xl border border-white/10 bg-zinc-900 px-4 text-sm text-white outline-none"
+                >
+                  <option value="normal">{isZh ? "普通" : "Normal"}</option>
+                  <option value="whitelist">{isZh ? "白名单" : "Whitelist"}</option>
+                  <option value="blacklist">{isZh ? "黑名单" : "Blacklist"}</option>
+                </select>
               </div>
+
+              <button
+                onClick={handleMetaSave}
+                disabled={updating}
+                className="rounded-xl bg-emerald-400 px-6 py-3 text-sm font-semibold text-black disabled:opacity-50"
+              >
+                {isZh ? "保存备注与标签" : "Save Note & Tag"}
+              </button>
             </div>
           </div>
         </div>
@@ -472,4 +559,3 @@ export default function AdminUserDetailPage() {
     </main>
   );
 }
-
