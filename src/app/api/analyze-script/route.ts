@@ -21,6 +21,11 @@ type StructuredResultPayload = {
   characters: string[];
   storyboard: StoryboardItem[];
   script: string;
+  preprocessInfo?: {
+    detectedFormat: string;
+    extractedCharacters: string[];
+    extractedSceneHints: string[];
+  };
 };
 
 function normalizeResult(
@@ -28,6 +33,8 @@ function normalizeResult(
   originalScript: string,
   normalizedScript: string,
   preDetectedCharacters: string[],
+  preDetectedSceneHints: string[],
+  detectedFormat: string,
   isZh: boolean
 ): StructuredResultPayload {
   const title =
@@ -159,6 +166,11 @@ function normalizeResult(
             },
           ],
     script: originalScript,
+    preprocessInfo: {
+      detectedFormat,
+      extractedCharacters: preDetectedCharacters,
+      extractedSceneHints: preDetectedSceneHints,
+    },
   };
 }
 
@@ -346,6 +358,8 @@ ${preprocessed.normalizedScript}
       script,
       preprocessed.normalizedScript,
       preprocessed.extractedCharacters,
+      preprocessed.extractedSceneHints,
+      preprocessed.detectedFormat,
       isZh
     );
 

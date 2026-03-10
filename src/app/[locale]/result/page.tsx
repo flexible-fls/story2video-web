@@ -26,6 +26,11 @@ type StructuredResultPayload = {
   characters: string[];
   storyboard: StoryboardItem[];
   script: string;
+  preprocessInfo?: {
+    detectedFormat: string;
+    extractedCharacters: string[];
+    extractedSceneHints: string[];
+  };
 };
 
 type GenerationJobRow = {
@@ -90,6 +95,24 @@ function downloadTextFile(filename: string, content: string, mimeType = "text/pl
 
 function buildExportText(payload: StructuredResultPayload, isZh: boolean) {
   const lines: string[] = [];
+
+  if (payload.preprocessInfo) {
+    lines.push(isZh ? "【剧本识别信息】" : "[Preprocess Info]");
+    lines.push(
+      `${isZh ? "识别格式" : "Detected Format"}：${payload.preprocessInfo.detectedFormat || "-"}`
+    );
+    lines.push(
+      `${isZh ? "预识别角色" : "Pre-detected Characters"}：${
+        payload.preprocessInfo.extractedCharacters?.join(isZh ? "、" : ", ") || "-"
+      }`
+    );
+    lines.push(
+      `${isZh ? "场景提示" : "Scene Hints"}：${
+        payload.preprocessInfo.extractedSceneHints?.join(isZh ? "；" : "; ") || "-"
+      }`
+    );
+    lines.push("");
+  }
 
   lines.push(isZh ? "【项目标题】" : "[Title]");
   lines.push(payload.title || "-");
@@ -288,6 +311,18 @@ export default function ResultPage() {
     return "border-white/10 bg-white/[0.03] text-zinc-300";
   }
 
+  function formatDetectedFormat(format?: string) {
+    if (!format) return "-";
+    if (!isZh) return format;
+
+    if (format === "dialogue") return "对话体";
+    if (format === "screenplay") return "短剧 / 分场体";
+    if (format === "novel") return "小说体";
+    if (format === "mixed") return "混合体";
+    if (format === "unknown") return "未识别";
+    return format;
+  }
+
   async function copyStructuredResult() {
     if (!payload) return;
     const text = buildExportText(payload, isZh);
@@ -374,8 +409,8 @@ export default function ResultPage() {
 
             <p className="mt-6 max-w-2xl text-lg leading-8 text-zinc-300">
               {isZh
-                ? "这里会展示剧本解析后的结构化结果，包括项目信息、剧情摘要、角色列表、分镜脚本和封面文案建议。"
-                : "This page shows your structured output, including project info, story summary, characters, storyboard, and cover copy suggestions."}
+                ? "这里会展示剧本解析后的结构化结果，包括项目信息、剧情摘要、角色列表、分镜脚本、剧本识别信息和封面文案建议。"
+                : "This page shows your structured output, including project info, story summary, characters, storyboard, preprocess info, and cover copy suggestions."}
             </p>
 
             <div className="mt-10 grid gap-4 sm:grid-cols-4">
@@ -577,6 +612,50 @@ export default function ResultPage() {
               </div>
             </div>
           </section>
+
+          {payload.preprocessInfo ? (
+            <section className="mx-auto max-w-7xl px-6 py-12">
+              <div className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-7">
+                <div className="mb-5 flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-medium text-emerald-300">
+                      {isZh ? "剧本识别信息" : "Script Recognition Info"}
+                    </div>
+                    <div className="mt-2 text-3xl font-bold text-white">
+                      {isZh ? "系统对剧本的预识别结果" : "System preprocessing insights"}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div className="rounded-[24px] border border-white/8 bg-black/25 p-5">
+                    <div className="text-sm text-zinc-400">{isZh ? "识别格式" : "Detected Format"}</div>
+                    <div className="mt-3 text-xl font-semibold text-white">
+                      {formatDetectedFormat(payload.preprocessInfo.detectedFormat)}
+                    </div>
+                  </div>
+
+                  <div className="rounded-[24px] border border-white/8 bg-black/25 p-5">
+                    <div className="text-sm text-zinc-400">{isZh ? "预识别角色" : "Pre-detected Characters"}</div>
+                    <div className="mt-3 text-sm leading-7 text-zinc-300">
+                      {payload.preprocessInfo.extractedCharacters.length > 0
+                        ? payload.preprocessInfo.extractedCharacters.join(isZh ? "、" : ", ")
+                        : "-"}
+                    </div>
+                  </div>
+
+                  <div className="rounded-[24px] border border-white/8 bg-black/25 p-5">
+                    <div className="text-sm text-zinc-400">{isZh ? "场景提示" : "Scene Hints"}</div>
+                    <div className="mt-3 text-sm leading-7 text-zinc-300">
+                      {payload.preprocessInfo.extractedSceneHints.length > 0
+                        ? payload.preprocessInfo.extractedSceneHints.join(isZh ? "；" : "; ")
+                        : "-"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          ) : null}
 
           <section className="mx-auto max-w-7xl px-6 py-12">
             <div className="grid gap-6 xl:grid-cols-3">
