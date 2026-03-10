@@ -41,6 +41,14 @@ type OrderRow = {
 
 type TabKey = "overview" | "users" | "orders" | "generations" | "grant";
 
+type MonthlyPoint = {
+  key: string;
+  label: string;
+  revenue: number;
+  users: number;
+  generations: number;
+};
+
 export default function AdminPage() {
   const pathname = usePathname();
   const router = useRouter();
@@ -289,7 +297,11 @@ export default function AdminPage() {
     return text;
   }
 
-  function downloadCsv(filename: string, headers: string[], rows: (string | number | null | undefined)[][]) {
+  function downloadCsv(
+    filename: string,
+    headers: string[],
+    rows: (string | number | null | undefined)[][]
+  ) {
     const csv = [
       headers.map(escapeCsvValue).join(","),
       ...rows.map((row) => row.map(escapeCsvValue).join(",")),
@@ -357,6 +369,64 @@ export default function AdminPage() {
     );
     setActionMessage(isZh ? "生成记录已导出 CSV" : "Generations exported to CSV");
   }
+
+  function getMonthKey(dateString: string) {
+    const date = new Date(dateString);
+    const year = date.getFullYear();
+    const month = `${date.getMonth() + 1}`.padStart(2, "0");
+    return `${year}-${month}`;
+  }
+
+  function getMonthLabel(key: string) {
+    const [year, month] = key.split("-");
+    return `${year}/${month}`;
+  }
+
+  const monthlyStats = useMemo<MonthlyPoint[]>(() => {
+    const monthMap = new Map<string, MonthlyPoint>();
+    const now = new Date();
+
+    for (let i = 5; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, "0")}`;
+      monthMap.set(key, {
+        key,
+        label: getMonthLabel(key),
+        revenue: 0,
+        users: 0,
+        generations: 0,
+      });
+    }
+
+    profiles.forEach((item) => {
+      const key = getMonthKey(item.updated_at);
+      if (monthMap.has(key)) {
+        monthMap.get(key)!.users += 1;
+      }
+    });
+
+    orders
+      .filter((item) => item.status === "paid")
+      .forEach((item) => {
+        const key = getMonthKey(item.created_at);
+        if (monthMap.has(key)) {
+          monthMap.get(key)!.revenue += item.amount || 0;
+        }
+      });
+
+    generations.forEach((item) => {
+      const key = getMonthKey(item.created_at);
+      if (monthMap.has(key)) {
+        monthMap.get(key)!.generations += 1;
+      }
+    });
+
+    return Array.from(monthMap.values());
+  }, [profiles, orders, generations]);
+
+  const revenueMax = Math.max(...monthlyStats.map((item) => item.revenue), 1);
+  const usersMax = Math.max(...monthlyStats.map((item) => item.users), 1);
+  const generationsMax = Math.max(...monthlyStats.map((item) => item.generations), 1);
 
   const totalUsers = profiles.length;
   const totalGenerations = generations.length;
@@ -486,8 +556,8 @@ export default function AdminPage() {
 
           <p className="mt-3 text-zinc-400">
             {isZh
-              ? "查看全站用户、订单、生成情况，并支持搜索、筛选、改套餐、补单、封禁、数据清理和 CSV 导出。"
-              : "Review platform users, orders, and generations with search, filters, plan edits, grants, bans, cleanup tools, and CSV export."}
+              ? "查看全站用户、订单、生成情况，并支持搜索、筛选、改套餐、补单、封禁、数据清理、CSV 导出和趋势统计。"
+              : "Review platform users, orders, and generations with search, filters, plan edits, grants, bans, cleanup tools, CSV export, and trend analytics."}
           </p>
         </div>
 
@@ -614,69 +684,139 @@ export default function AdminPage() {
         </div>
 
         {activeTab === "overview" && (
-          <div className="mt-8 grid gap-6 xl:grid-cols-2">
-            <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6">
-              <div className="mb-4 text-xl font-semibold">
-                {isZh ? "最近生成记录" : "Recent Generations"}
+          <>
+            <div className="mt-8 grid gap-6 xl:grid-cols-3">
+              <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6">
+                <div className="mb-4 text-xl font-semibold">
+                  {isZh ? "近 6 个月收入趋势" : "Revenue Trend (6 Months)"}
+                </div>
+                <div className="space-y-4">
+                  {monthlyStats.map((item) => (
+                    <div key={item.key}>
+                      <div className="mb-2 flex items-center justify-between text-sm">
+                        <span className="text-zinc-300">{item.label}</span>
+                        <span className="text-zinc-400">{formatMoney(item.revenue)}</span>
+                      </div>
+                      <div className="h-3 rounded-full bg-zinc-950">
+                        <div
+                          className="h-3 rounded-full bg-emerald-400"
+                          style={{ width: `${Math.max((item.revenue / revenueMax) * 100, item.revenue > 0 ? 8 : 0)}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
 
-              {recentGenerations.length === 0 ? (
-                <div className="rounded-2xl bg-zinc-950 p-6 text-zinc-400">
-                  {isZh ? "暂无生成记录" : "No generation records yet"}
+              <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6">
+                <div className="mb-4 text-xl font-semibold">
+                  {isZh ? "近 6 个月新增用户" : "New Users (6 Months)"}
                 </div>
-              ) : (
                 <div className="space-y-4">
-                  {recentGenerations.map((item) => (
-                    <div key={item.id} className="rounded-2xl bg-zinc-950 p-4">
-                      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                        <div>
-                          <div className="font-medium">
-                            {item.file_name || (isZh ? "未命名文件" : "Untitled file")}
+                  {monthlyStats.map((item) => (
+                    <div key={item.key}>
+                      <div className="mb-2 flex items-center justify-between text-sm">
+                        <span className="text-zinc-300">{item.label}</span>
+                        <span className="text-zinc-400">{item.users}</span>
+                      </div>
+                      <div className="h-3 rounded-full bg-zinc-950">
+                        <div
+                          className="h-3 rounded-full bg-white"
+                          style={{ width: `${Math.max((item.users / usersMax) * 100, item.users > 0 ? 8 : 0)}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6">
+                <div className="mb-4 text-xl font-semibold">
+                  {isZh ? "近 6 个月生成次数" : "Generations (6 Months)"}
+                </div>
+                <div className="space-y-4">
+                  {monthlyStats.map((item) => (
+                    <div key={item.key}>
+                      <div className="mb-2 flex items-center justify-between text-sm">
+                        <span className="text-zinc-300">{item.label}</span>
+                        <span className="text-zinc-400">{item.generations}</span>
+                      </div>
+                      <div className="h-3 rounded-full bg-zinc-950">
+                        <div
+                          className="h-3 rounded-full bg-zinc-400"
+                          style={{ width: `${Math.max((item.generations / generationsMax) * 100, item.generations > 0 ? 8 : 0)}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-8 grid gap-6 xl:grid-cols-2">
+              <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6">
+                <div className="mb-4 text-xl font-semibold">
+                  {isZh ? "最近生成记录" : "Recent Generations"}
+                </div>
+
+                {recentGenerations.length === 0 ? (
+                  <div className="rounded-2xl bg-zinc-950 p-6 text-zinc-400">
+                    {isZh ? "暂无生成记录" : "No generation records yet"}
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {recentGenerations.map((item) => (
+                      <div key={item.id} className="rounded-2xl bg-zinc-950 p-4">
+                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                          <div>
+                            <div className="font-medium">
+                              {item.file_name || (isZh ? "未命名文件" : "Untitled file")}
+                            </div>
+                            <div className="mt-1 text-xs text-zinc-500">{item.email || "-"}</div>
                           </div>
-                          <div className="mt-1 text-xs text-zinc-500">{item.email || "-"}</div>
-                        </div>
-                        <div className="flex flex-wrap gap-2 text-xs">
-                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{formatPlan(item.plan)}</div>
-                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{isZh ? "消耗" : "Cost"}: {item.quota_cost}</div>
-                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{formatTime(item.created_at)}</div>
+                          <div className="flex flex-wrap gap-2 text-xs">
+                            <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{formatPlan(item.plan)}</div>
+                            <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{isZh ? "消耗" : "Cost"}: {item.quota_cost}</div>
+                            <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{formatTime(item.created_at)}</div>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6">
-              <div className="mb-4 text-xl font-semibold">
-                {isZh ? "最近订单记录" : "Recent Orders"}
+                    ))}
+                  </div>
+                )}
               </div>
 
-              {recentOrders.length === 0 ? (
-                <div className="rounded-2xl bg-zinc-950 p-6 text-zinc-400">
-                  {isZh ? "暂无订单记录" : "No order records yet"}
+              <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6">
+                <div className="mb-4 text-xl font-semibold">
+                  {isZh ? "最近订单记录" : "Recent Orders"}
                 </div>
-              ) : (
-                <div className="space-y-4">
-                  {recentOrders.map((item) => (
-                    <div key={item.id} className="rounded-2xl bg-zinc-950 p-4">
-                      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                        <div>
-                          <div className="font-medium">{formatPlan(item.plan)}</div>
-                          <div className="mt-1 text-xs text-zinc-500">{item.email || "-"}</div>
-                        </div>
-                        <div className="flex flex-wrap gap-2 text-xs">
-                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{formatMoney(item.amount)}</div>
-                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{item.status}</div>
-                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{formatTime(item.created_at)}</div>
+
+                {recentOrders.length === 0 ? (
+                  <div className="rounded-2xl bg-zinc-950 p-6 text-zinc-400">
+                    {isZh ? "暂无订单记录" : "No order records yet"}
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {recentOrders.map((item) => (
+                      <div key={item.id} className="rounded-2xl bg-zinc-950 p-4">
+                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                          <div>
+                            <div className="font-medium">{formatPlan(item.plan)}</div>
+                            <div className="mt-1 text-xs text-zinc-500">{item.email || "-"}</div>
+                          </div>
+                          <div className="flex flex-wrap gap-2 text-xs">
+                            <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{formatMoney(item.amount)}</div>
+                            <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{item.status}</div>
+                            <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{formatTime(item.created_at)}</div>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          </>
         )}
 
         {activeTab === "users" && (
