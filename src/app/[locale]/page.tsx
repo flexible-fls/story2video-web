@@ -273,9 +273,9 @@ export default function HomePage() {
   return (
     <main className="min-h-screen bg-[#05070b] text-white">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute left-[-120px] top-[120px] h-[380px] w-[380px] rounded-full bg-emerald-500/10 blur-3xl" />
-        <div className="absolute right-[-80px] top-[120px] h-[420px] w-[420px] rounded-full bg-cyan-500/10 blur-3xl" />
-        <div className="absolute left-[20%] top-[40%] h-[220px] w-[220px] rounded-full bg-emerald-400/5 blur-3xl" />
+        <div className="absolute left-[-120px] top-[100px] h-[380px] w-[380px] rounded-full bg-emerald-500/10 blur-3xl" />
+        <div className="absolute right-[-90px] top-[120px] h-[420px] w-[420px] rounded-full bg-cyan-500/10 blur-3xl" />
+        <div className="absolute left-[18%] top-[42%] h-[220px] w-[220px] rounded-full bg-emerald-400/5 blur-3xl" />
       </div>
 
       <header className="sticky top-0 z-30 border-b border-white/10 bg-[#05070b]/80 backdrop-blur">
@@ -286,6 +286,21 @@ export default function HomePage() {
               {isZh ? "AI 短剧与漫剧生成平台" : "AI Drama & Comic Video Studio"}
             </div>
           </div>
+
+          <nav className="hidden items-center gap-6 text-sm text-zinc-300 lg:flex">
+            <a href="#features" className="transition hover:text-white">
+              {isZh ? "功能" : "Features"}
+            </a>
+            <a href="#pricing" className="transition hover:text-white">
+              {isZh ? "套餐" : "Pricing"}
+            </a>
+            <a href="#workflow" className="transition hover:text-white">
+              {isZh ? "流程" : "Workflow"}
+            </a>
+            <a href="#faq" className="transition hover:text-white">
+              FAQ
+            </a>
+          </nav>
 
           <div className="flex items-center gap-3">
             <Link
@@ -571,7 +586,16 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-6 py-12">
+      <section id="features" className="mx-auto max-w-7xl px-6 py-12">
+        <div className="mb-6">
+          <div className="inline-flex rounded-full border border-emerald-400/20 bg-emerald-400/10 px-4 py-1 text-xs text-emerald-300">
+            {isZh ? "功能能力" : "Core Features"}
+          </div>
+          <h2 className="mt-4 text-4xl font-bold text-white md:text-5xl">
+            {isZh ? "围绕短剧与漫剧创作的核心能力" : "Core capabilities built for drama and comic creation"}
+          </h2>
+        </div>
+
         <div className="grid gap-6 md:grid-cols-3">
           <div className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-7">
             <div className="text-sm font-medium text-emerald-300">
@@ -617,7 +641,98 @@ export default function HomePage() {
         </div>
       </section>
 
+      <section id="workflow" className="mx-auto max-w-7xl px-6 py-14">
+        <div className="mb-6">
+          <div className="inline-flex rounded-full border border-emerald-400/20 bg-emerald-400/10 px-4 py-1 text-xs text-emerald-300">
+            {isZh ? "使用流程" : "Workflow"}
+          </div>
+          <h2 className="mt-4 text-4xl font-bold text-white md:text-5xl">
+            {isZh ? "从剧本到结果，只需要 4 步" : "From script to result in 4 steps"}
+          </h2>
+        </div>
+
+        <div className="grid gap-6 md:grid-cols-4">
+          {[
+            {
+              title: isZh ? "上传剧本" : "Upload Script",
+              desc: isZh
+                ? "支持 txt、md、docx、pdf 等格式，也支持直接粘贴。"
+                : "Supports txt, md, docx, pdf, and direct paste.",
+            },
+            {
+              title: isZh ? "AI 解析" : "AI Analysis",
+              desc: isZh
+                ? "自动识别剧本结构、角色关系、剧情摘要与爆点内容。"
+                : "Automatically detects structure, characters, summaries, and hooks.",
+            },
+            {
+              title: isZh ? "生成结果" : "Structured Output",
+              desc: isZh
+                ? "得到标题、摘要、角色、分镜、封面文案等结构化结果。"
+                : "Get titles, summaries, characters, storyboards, and cover copy.",
+            },
+            {
+              title: isZh ? "进入任务流" : "Manage in Jobs",
+              desc: isZh
+                ? "所有生成记录进入任务中心，方便回看、迭代和复用。"
+                : "All results are saved into the jobs center for reuse and iteration.",
+            },
+          ].map((item, index) => (
+            <div
+              key={item.title}
+              className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-7"
+            >
+              <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-emerald-400 text-sm font-bold text-black">
+                {index + 1}
+              </div>
+              <div className="mt-5 text-2xl font-bold text-white">{item.title}</div>
+              <p className="mt-4 text-sm leading-7 text-zinc-300">{item.desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
       <section className="mx-auto max-w-7xl px-6 py-14">
+        <div className="mb-6">
+          <div className="inline-flex rounded-full border border-emerald-400/20 bg-emerald-400/10 px-4 py-1 text-xs text-emerald-300">
+            {isZh ? "适用场景" : "Use Cases"}
+          </div>
+          <h2 className="mt-4 text-4xl font-bold text-white md:text-5xl">
+            {isZh ? "适合这些创作者与团队" : "Built for these creators and teams"}
+          </h2>
+        </div>
+
+        <div className="grid gap-6 md:grid-cols-3">
+          <div className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-7">
+            <div className="text-2xl font-bold text-white">{isZh ? "短剧创作者" : "Short Drama Creators"}</div>
+            <p className="mt-4 text-sm leading-7 text-zinc-300">
+              {isZh
+                ? "适合快速测试剧情节奏、角色关系和爆点文案。"
+                : "Great for quickly testing pacing, character relationships, and high-conversion hooks."}
+            </p>
+          </div>
+
+          <div className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-7">
+            <div className="text-2xl font-bold text-white">{isZh ? "漫剧团队" : "Comic Teams"}</div>
+            <p className="mt-4 text-sm leading-7 text-zinc-300">
+              {isZh
+                ? "适合把文字剧本整理成分镜结构，便于后续出图和制作。"
+                : "Useful for turning text scripts into storyboard-ready structure for later image production."}
+            </p>
+          </div>
+
+          <div className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-7">
+            <div className="text-2xl font-bold text-white">{isZh ? "内容工作室" : "Content Studios"}</div>
+            <p className="mt-4 text-sm leading-7 text-zinc-300">
+              {isZh
+                ? "适合长期项目管理、批量改稿和任务化内容生产。"
+                : "Designed for long-running projects, iterative editing, and task-based content operations."}
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="pricing" className="mx-auto max-w-7xl px-6 py-14">
         <div className="mb-6">
           <div className="inline-flex rounded-full border border-emerald-400/20 bg-emerald-400/10 px-4 py-1 text-xs text-emerald-300">
             {isZh ? "套餐方案" : "Pricing"}
@@ -715,6 +830,54 @@ export default function HomePage() {
         </div>
       </section>
 
+      <section id="faq" className="mx-auto max-w-7xl px-6 py-14">
+        <div className="mb-6">
+          <div className="inline-flex rounded-full border border-emerald-400/20 bg-emerald-400/10 px-4 py-1 text-xs text-emerald-300">
+            FAQ
+          </div>
+          <h2 className="mt-4 text-4xl font-bold text-white md:text-5xl">
+            {isZh ? "常见问题" : "Frequently Asked Questions"}
+          </h2>
+        </div>
+
+        <div className="grid gap-6 md:grid-cols-2">
+          {[
+            {
+              q: isZh ? "支持哪些剧本格式？" : "Which script formats are supported?",
+              a: isZh
+                ? "当前支持 txt、md、text、docx、pdf，同时支持直接粘贴文本内容。"
+                : "Currently supports txt, md, text, docx, pdf, as well as direct text paste.",
+            },
+            {
+              q: isZh ? "上传后会发生什么？" : "What happens after upload?",
+              a: isZh
+                ? "系统会把剧本带入生成页，随后进行 AI 解析、结构化输出和任务记录。"
+                : "The script is carried into the generate page, then analyzed by AI and saved as a task result.",
+            },
+            {
+              q: isZh ? "结果里会包含什么？" : "What is included in the result?",
+              a: isZh
+                ? "通常包含标题、AI 标题、摘要、角色、分镜、封面文案以及剧本识别信息。"
+                : "Usually includes title, AI title, summary, characters, storyboard, cover copy, and preprocess info.",
+            },
+            {
+              q: isZh ? "我可以反复修改同一个剧本吗？" : "Can I iterate on the same script?",
+              a: isZh
+                ? "可以。你可以在任务中心查看历史任务，也可以重新导入剧本再次生成。"
+                : "Yes. You can revisit jobs in the jobs center and regenerate from previous scripts.",
+            },
+          ].map((item) => (
+            <div
+              key={item.q}
+              className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-7"
+            >
+              <div className="text-xl font-bold text-white">{item.q}</div>
+              <p className="mt-4 text-sm leading-7 text-zinc-300">{item.a}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
       <section className="mx-auto max-w-7xl px-6 py-14">
         <div className="rounded-[36px] border border-emerald-400/20 bg-gradient-to-br from-emerald-400/15 via-emerald-400/10 to-cyan-400/10 p-10 text-center shadow-[0_20px_80px_rgba(16,185,129,0.08)]">
           <div className="text-sm font-medium text-emerald-200">
@@ -757,6 +920,94 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      <footer className="border-t border-white/10 bg-black/20">
+        <div className="mx-auto grid max-w-7xl gap-8 px-6 py-10 md:grid-cols-4">
+          <div>
+            <div className="text-xl font-semibold text-white">FulushouVideo</div>
+            <p className="mt-3 text-sm leading-7 text-zinc-400">
+              {isZh
+                ? "面向短剧与漫剧内容生产的 AI 剧本结构化与任务化平台。"
+                : "An AI platform for structured script processing and task-driven production for drama and comics."}
+            </p>
+          </div>
+
+          <div>
+            <div className="text-sm font-semibold text-white">{isZh ? "产品" : "Product"}</div>
+            <div className="mt-4 space-y-3 text-sm text-zinc-400">
+              <div>
+                <a href="#features" className="transition hover:text-white">
+                  {isZh ? "功能能力" : "Features"}
+                </a>
+              </div>
+              <div>
+                <a href="#pricing" className="transition hover:text-white">
+                  {isZh ? "套餐方案" : "Pricing"}
+                </a>
+              </div>
+              <div>
+                <a href="#workflow" className="transition hover:text-white">
+                  {isZh ? "使用流程" : "Workflow"}
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div className="text-sm font-semibold text-white">{isZh ? "入口" : "Entry"}</div>
+            <div className="mt-4 space-y-3 text-sm text-zinc-400">
+              <div>
+                <Link href={`/${locale}/generate`} className="transition hover:text-white">
+                  {isZh ? "生成页" : "Generate"}
+                </Link>
+              </div>
+              <div>
+                <Link href={`/${locale}/jobs`} className="transition hover:text-white">
+                  {isZh ? "任务中心" : "Jobs"}
+                </Link>
+              </div>
+              <div>
+                <Link href={`/${locale}/billing`} className="transition hover:text-white">
+                  {isZh ? "套餐页" : "Billing"}
+                </Link>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div className="text-sm font-semibold text-white">{isZh ? "账户" : "Account"}</div>
+            <div className="mt-4 space-y-3 text-sm text-zinc-400">
+              {isAuthed ? (
+                <>
+                  <div>
+                    <Link href={`/${locale}/account`} className="transition hover:text-white">
+                      {isZh ? "账户中心" : "Account Center"}
+                    </Link>
+                  </div>
+                  <div>
+                    <button
+                      onClick={handleSignOut}
+                      className="transition hover:text-white"
+                    >
+                      {isZh ? "退出登录" : "Sign Out"}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div>
+                  <Link href={`/${locale}/auth`} className="transition hover:text-white">
+                    {isZh ? "登录 / 注册" : "Login / Sign Up"}
+                  </Link>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="border-t border-white/10 px-6 py-4 text-center text-xs text-zinc-500">
+          © 2026 FulushouVideo. {isZh ? "保留所有权利。" : "All rights reserved."}
+        </div>
+      </footer>
     </main>
   );
 }
