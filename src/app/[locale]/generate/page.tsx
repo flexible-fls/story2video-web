@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import LanguageSwitch from "@/components/LanguageSwitch";
+import BackButton from "@/components/BackButton";
 import { supabase } from "@/lib/supabase";
 
 type ProfileRow = {
@@ -441,10 +442,13 @@ export default function GeneratePage() {
     <main className="min-h-screen bg-zinc-950 text-white">
       <header className="sticky top-0 z-30 border-b border-white/10 bg-zinc-950/80 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-          <div>
-            <div className="text-xl font-semibold tracking-tight">FulushouVideo</div>
-            <div className="text-xs text-zinc-400">
-              {isZh ? "AI 短剧与漫剧生成平台" : "AI Drama & Comic Video Studio"}
+          <div className="flex items-center gap-3">
+            <BackButton fallbackHref={`/${locale}`} />
+            <div>
+              <div className="text-xl font-semibold tracking-tight">FulushouVideo</div>
+              <div className="text-xs text-zinc-400">
+                {isZh ? "AI 短剧与漫剧生成平台" : "AI Drama & Comic Video Studio"}
+              </div>
             </div>
           </div>
 
