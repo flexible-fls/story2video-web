@@ -56,46 +56,88 @@ export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
   const [search, setSearch] = useState("");
   const [planFilter, setPlanFilter] = useState("all");
+  const [actionMessage, setActionMessage] = useState("");
+  const [updatingUserId, setUpdatingUserId] = useState("");
 
   useEffect(() => {
-    async function loadAdminData() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) {
-        router.push(`/${locale}/auth`);
-        return;
-      }
-
-      const { data: adminRow } = await supabase
-        .from("admins")
-        .select("id")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      if (!adminRow) {
-        router.push(`/${locale}/account`);
-        return;
-      }
-
-      setAllowed(true);
-
-      const [{ data: profileData }, { data: generationData }, { data: orderData }] =
-        await Promise.all([
-          supabase.from("profiles").select("*").order("updated_at", { ascending: false }),
-          supabase.from("generations").select("*").order("created_at", { ascending: false }),
-          supabase.from("orders").select("*").order("created_at", { ascending: false }),
-        ]);
-
-      setProfiles((profileData as ProfileRow[]) || []);
-      setGenerations((generationData as GenerationRow[]) || []);
-      setOrders((orderData as OrderRow[]) || []);
-      setLoading(false);
-    }
-
     loadAdminData();
   }, [locale, router]);
+
+  async function loadAdminData() {
+    setLoading(true);
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      router.push(`/${locale}/auth`);
+      return;
+    }
+
+    const { data: adminRow } = await supabase
+      .from("admins")
+      .select("id")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (!adminRow) {
+      router.push(`/${locale}/account`);
+      return;
+    }
+
+    setAllowed(true);
+
+    const [{ data: profileData }, { data: generationData }, { data: orderData }] =
+      await Promise.all([
+        supabase.from("profiles").select("*").order("updated_at", { ascending: false }),
+        supabase.from("generations").select("*").order("created_at", { ascending: false }),
+        supabase.from("orders").select("*").order("created_at", { ascending: false }),
+      ]);
+
+    setProfiles((profileData as ProfileRow[]) || []);
+    setGenerations((generationData as GenerationRow[]) || []);
+    setOrders((orderData as OrderRow[]) || []);
+    setLoading(false);
+  }
+
+  async function handlePlanUpdate(userId: string, nextPlan: "free" | "pro" | "studio") {
+    setUpdatingUserId(userId);
+    setActionMessage("");
+
+    const { error } = await supabase.rpc("admin_update_user_plan", {
+      target_user_id: userId,
+      target_plan: nextPlan,
+    });
+
+    if (error) {
+      setActionMessage(
+        isZh ? `修改失败：${error.message}` : `Update failed: ${error.message}`
+      );
+      setUpdatingUserId("");
+      return;
+    }
+
+    setProfiles((prev) =>
+      prev.map((item) =>
+        item.id === userId
+          ? {
+              ...item,
+              plan: nextPlan,
+              monthly_quota: nextPlan === "studio" ? 999999 : nextPlan === "pro" ? 50 : 5,
+              used_count: 0,
+              status: "active",
+              updated_at: new Date().toISOString(),
+            }
+          : item
+      )
+    );
+
+    setActionMessage(
+      isZh ? `已成功修改用户套餐为 ${formatPlan(nextPlan)}` : `Plan updated to ${formatPlan(nextPlan)}`
+    );
+    setUpdatingUserId("");
+  }
 
   const totalUsers = profiles.length;
   const totalGenerations = generations.length;
@@ -215,8 +257,8 @@ export default function AdminPage() {
 
           <p className="mt-3 text-zinc-400">
             {isZh
-              ? "查看全站用户、订单、生成情况，并支持基础搜索与套餐筛选。"
-              : "Review platform users, orders, and generations with basic search and plan filters."}
+              ? "查看全站用户、订单、生成情况，并支持基础搜索、套餐筛选和手动修改用户套餐。"
+              : "Review platform users, orders, and generations with search, plan filters, and manual plan updates."}
           </p>
         </div>
 
@@ -306,6 +348,12 @@ export default function AdminPage() {
               </select>
             </div>
           </div>
+
+          {actionMessage && (
+            <div className="mt-4 rounded-2xl bg-zinc-950 px-4 py-3 text-sm text-emerald-300">
+              {actionMessage}
+            </div>
+          )}
         </div>
 
         {activeTab === "overview" && (
@@ -406,7 +454,7 @@ export default function AdminPage() {
               ) : (
                 filteredProfiles.map((item) => (
                   <div key={item.id} className="rounded-2xl bg-zinc-950 p-4">
-                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                       <div>
                         <div className="font-medium">{item.email || "-"}</div>
                         <div className="mt-1 text-xs text-zinc-500">{item.id}</div>
@@ -431,6 +479,30 @@ export default function AdminPage() {
                           {formatTime(item.updated_at)}
                         </div>
                       </div>
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <button
+                        onClick={() => handlePlanUpdate(item.id, "free")}
+                        disabled={updatingUserId === item.id}
+                        className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-200 disabled:opacity-50"
+                      >
+                        {isZh ? "设为 Free" : "Set Free"}
+                      </button>
+                      <button
+                        onClick={() => handlePlanUpdate(item.id, "pro")}
+                        disabled={updatingUserId === item.id}
+                        className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-200 disabled:opacity-50"
+                      >
+                        {isZh ? "设为 Pro" : "Set Pro"}
+                      </button>
+                      <button
+                        onClick={() => handlePlanUpdate(item.id, "studio")}
+                        disabled={updatingUserId === item.id}
+                        className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-sm text-emerald-300 disabled:opacity-50"
+                      >
+                        {isZh ? "设为 Studio" : "Set Studio"}
+                      </button>
                     </div>
                   </div>
                 ))
