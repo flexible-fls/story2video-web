@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import LanguageSwitch from "@/components/LanguageSwitch";
 import BackButton from "@/components/BackButton";
