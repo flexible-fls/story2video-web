@@ -53,6 +53,7 @@ export default function AdminUserDetailPage() {
   const [generations, setGenerations] = useState<GenerationRow[]>([]);
   const [actionMessage, setActionMessage] = useState("");
   const [updating, setUpdating] = useState(false);
+  const [deletingId, setDeletingId] = useState("");
 
   useEffect(() => {
     loadUserDetail();
@@ -130,6 +131,58 @@ export default function AdminUserDetailPage() {
     );
 
     setUpdating(false);
+  }
+
+  async function handleDeleteOrder(orderId: string) {
+    const ok = window.confirm(
+      isZh ? "确认删除这条订单记录吗？" : "Are you sure you want to delete this order?"
+    );
+    if (!ok) return;
+
+    setDeletingId(orderId);
+    setActionMessage("");
+
+    const { error } = await supabase.rpc("admin_delete_order", {
+      target_order_id: orderId,
+    });
+
+    if (error) {
+      setActionMessage(
+        isZh ? `删除订单失败：${error.message}` : `Failed to delete order: ${error.message}`
+      );
+      setDeletingId("");
+      return;
+    }
+
+    setOrders((prev) => prev.filter((item) => item.id !== orderId));
+    setActionMessage(isZh ? "订单记录已删除" : "Order deleted");
+    setDeletingId("");
+  }
+
+  async function handleDeleteGeneration(generationId: string) {
+    const ok = window.confirm(
+      isZh ? "确认删除这条生成记录吗？" : "Are you sure you want to delete this generation?"
+    );
+    if (!ok) return;
+
+    setDeletingId(generationId);
+    setActionMessage("");
+
+    const { error } = await supabase.rpc("admin_delete_generation", {
+      target_generation_id: generationId,
+    });
+
+    if (error) {
+      setActionMessage(
+        isZh ? `删除生成记录失败：${error.message}` : `Failed to delete generation: ${error.message}`
+      );
+      setDeletingId("");
+      return;
+    }
+
+    setGenerations((prev) => prev.filter((item) => item.id !== generationId));
+    setActionMessage(isZh ? "生成记录已删除" : "Generation deleted");
+    setDeletingId("");
   }
 
   const formatPlan = useMemo(
@@ -347,6 +400,16 @@ export default function AdminUserDetailPage() {
                         </div>
                       </div>
                     </div>
+
+                    <div className="mt-4">
+                      <button
+                        onClick={() => handleDeleteOrder(item.id)}
+                        disabled={deletingId === item.id}
+                        className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-300 disabled:opacity-50"
+                      >
+                        {isZh ? "删除订单" : "Delete Order"}
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -389,6 +452,16 @@ export default function AdminUserDetailPage() {
                         </div>
                       </div>
                     </div>
+
+                    <div className="mt-4">
+                      <button
+                        onClick={() => handleDeleteGeneration(item.id)}
+                        disabled={deletingId === item.id}
+                        className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-300 disabled:opacity-50"
+                      >
+                        {isZh ? "删除记录" : "Delete Record"}
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -399,3 +472,4 @@ export default function AdminUserDetailPage() {
     </main>
   );
 }
+
