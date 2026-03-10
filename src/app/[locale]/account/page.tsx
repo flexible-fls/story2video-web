@@ -121,9 +121,7 @@ export default function AccountPage() {
       return isZh ? "Studio 无限额度体验" : "Studio unlimited usage";
     }
 
-    return isZh
-      ? `${profile.used_count} / ${profile.monthly_quota}`
-      : `${profile.used_count} / ${profile.monthly_quota}`;
+    return `${profile.used_count} / ${profile.monthly_quota}`;
   }, [profile, isZh]);
 
   const quotaPercent = useMemo(() => {
@@ -219,34 +217,22 @@ export default function AccountPage() {
 
             <p className="mt-6 max-w-2xl text-lg leading-8 text-zinc-300">
               {isZh
-                ? "这里是你的账户中心。你可以查看当前套餐、额度状态、最近订单、最近生成记录，并快速进入任务中心、历史记录和套餐升级页。"
-                : "This is your account center. Check your current plan, quota status, recent orders, recent generations, and quickly access jobs, history, and pricing."}
+                ? "这里是你的账户中心。你可以查看当前套餐、额度状态、最近订单、最近生成记录，并快速进入任务中心、历史记录、活动记录和套餐升级页。"
+                : "This is your account center. Check your current plan, quota status, recent orders, recent generations, and quickly access jobs, history, activity, and pricing."}
             </p>
 
-            <div className="mt-8 flex flex-wrap gap-3">
-              <div className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-zinc-300">
-                {isZh ? "套餐状态" : "Plan Status"}
-              </div>
-              <div className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-zinc-300">
-                {isZh ? "额度管理" : "Quota Tracking"}
-              </div>
-              <div className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-zinc-300">
-                {isZh ? "任务与历史" : "Jobs & History"}
-              </div>
-            </div>
-
             <div className="mt-10 grid gap-4 sm:grid-cols-3">
-              <div className="rounded-[28px] border border-white/10 bg-gradient-to-b from-white/[0.06] to-white/[0.03] p-5 shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
+              <div className="rounded-[28px] border border-white/10 bg-gradient-to-b from-white/[0.06] to-white/[0.03] p-5">
                 <div className="text-sm text-zinc-400">{isZh ? "当前套餐" : "Current Plan"}</div>
                 <div className="mt-3 text-3xl font-bold text-white">{currentPlanLabel}</div>
               </div>
 
-              <div className="rounded-[28px] border border-white/10 bg-gradient-to-b from-white/[0.06] to-white/[0.03] p-5 shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
+              <div className="rounded-[28px] border border-white/10 bg-gradient-to-b from-white/[0.06] to-white/[0.03] p-5">
                 <div className="text-sm text-zinc-400">{isZh ? "额度状态" : "Quota"}</div>
                 <div className="mt-3 text-3xl font-bold text-white">{quotaText}</div>
               </div>
 
-              <div className="rounded-[28px] border border-white/10 bg-gradient-to-b from-white/[0.06] to-white/[0.03] p-5 shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
+              <div className="rounded-[28px] border border-white/10 bg-gradient-to-b from-white/[0.06] to-white/[0.03] p-5">
                 <div className="text-sm text-zinc-400">{isZh ? "账户状态" : "Account Status"}</div>
                 <div className="mt-3 text-3xl font-bold text-white">
                   {formatStatus(profile?.status || "active")}
@@ -255,156 +241,101 @@ export default function AccountPage() {
             </div>
           </div>
 
-          <div className="relative">
-            <div className="absolute inset-0 rounded-[32px] bg-gradient-to-br from-emerald-400/10 via-transparent to-cyan-400/10 blur-xl" />
-            <div className="relative rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900/95 to-zinc-950/95 p-6 shadow-[0_20px_80px_rgba(0,0,0,0.45)]">
-              <div className="text-3xl font-bold text-white">
-                {isZh ? "账户摘要" : "Account Summary"}
-              </div>
-              <div className="mt-2 text-sm text-zinc-400">
-                {isZh ? "当前登录账户的套餐与使用情况。" : "Plan and usage details for your current account."}
-              </div>
+          <div className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900/95 to-zinc-950/95 p-6">
+            <div className="text-3xl font-bold text-white">
+              {isZh ? "账户摘要" : "Account Summary"}
+            </div>
 
-              <div className="mt-6 rounded-[24px] border border-white/8 bg-black/40 p-5">
-                <div className="text-sm text-zinc-400">{isZh ? "邮箱" : "Email"}</div>
-                <div className="mt-3 break-all text-lg font-semibold text-white">
-                  {profile?.email || "-"}
-                </div>
+            <div className="mt-6 rounded-[24px] border border-white/8 bg-black/40 p-5">
+              <div className="text-sm text-zinc-400">{isZh ? "邮箱" : "Email"}</div>
+              <div className="mt-3 break-all text-lg font-semibold text-white">
+                {profile?.email || "-"}
               </div>
+            </div>
 
-              <div className="mt-4 rounded-[24px] border border-white/8 bg-black/40 p-5">
-                <div className="text-sm text-zinc-400">{isZh ? "当前套餐" : "Current Plan"}</div>
-                <div className="mt-3 text-4xl font-bold text-white">{currentPlanLabel}</div>
-                <div className="mt-3 text-sm text-zinc-300">
-                  {profile?.plan === "studio"
-                    ? isZh
-                      ? "Studio 适合团队与持续项目生产。"
-                      : "Studio is designed for teams and continuous projects."
-                    : profile?.plan === "pro"
-                    ? isZh
-                      ? "Pro 更适合高频个人创作者。"
-                      : "Pro is better for frequent individual creators."
-                    : isZh
-                    ? "Free 适合先体验平台流程。"
-                    : "Free is best for exploring the workflow first."}
-                </div>
+            <div className="mt-4 rounded-[24px] border border-white/8 bg-black/40 p-5">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="text-sm text-zinc-400">{isZh ? "额度使用情况" : "Quota Usage"}</div>
+                <div className="text-sm text-zinc-300">{quotaText}</div>
               </div>
 
-              <div className="mt-4 rounded-[24px] border border-white/8 bg-black/40 p-5">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <div className="text-sm text-zinc-400">{isZh ? "额度使用情况" : "Quota Usage"}</div>
-                  <div className="text-sm text-zinc-300">{quotaText}</div>
-                </div>
-
-                <div className="h-3 rounded-full bg-zinc-900">
-                  <div
-                    className="h-3 rounded-full bg-emerald-400 transition-all"
-                    style={{ width: `${quotaPercent}%` }}
-                  />
-                </div>
-
-                <div className="mt-3 text-xs text-zinc-500">
-                  {profile?.plan === "studio"
-                    ? isZh
-                      ? "Studio 当前展示为满额进度，仅表示无限使用。"
-                      : "Studio is shown as full progress only to indicate unlimited usage."
-                    : isZh
-                    ? "该进度用于显示当前月度额度消耗情况。"
-                    : "This progress bar shows your current monthly quota usage."}
-                </div>
+              <div className="h-3 rounded-full bg-zinc-900">
+                <div
+                  className="h-3 rounded-full bg-emerald-400 transition-all"
+                  style={{ width: `${quotaPercent}%` }}
+                />
               </div>
+            </div>
 
-              <div className="mt-4 rounded-[24px] border border-white/8 bg-black/40 p-5">
-                <div className="text-sm text-zinc-400">{isZh ? "最近更新时间" : "Last Updated"}</div>
-                <div className="mt-3 text-base text-zinc-200">{formatTime(profile?.updated_at)}</div>
-              </div>
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              <Link
+                href={`/${locale}/billing`}
+                className="rounded-2xl bg-emerald-400 px-6 py-3 text-center text-sm font-semibold text-black"
+              >
+                {isZh ? "查看套餐 / 升级" : "View Plans / Upgrade"}
+              </Link>
 
-              {profile?.admin_note ? (
-                <div className="mt-4 rounded-[24px] border border-white/8 bg-black/40 p-5">
-                  <div className="text-sm text-zinc-400">{isZh ? "管理员备注" : "Admin Note"}</div>
-                  <div className="mt-3 text-sm leading-7 text-zinc-300">{profile.admin_note}</div>
-                </div>
-              ) : null}
-
-              <div className="mt-6 grid gap-3 sm:grid-cols-2">
-                <Link
-                  href={`/${locale}/billing`}
-                  className="rounded-2xl bg-emerald-400 px-6 py-3 text-center text-sm font-semibold text-black transition hover:bg-emerald-300"
-                >
-                  {isZh ? "查看套餐 / 升级" : "View Plans / Upgrade"}
-                </Link>
-
-                <Link
-                  href={`/${locale}/generate`}
-                  className="rounded-2xl border border-white/10 bg-white/[0.03] px-6 py-3 text-center text-sm text-zinc-200 transition hover:bg-white/[0.07]"
-                >
-                  {isZh ? "继续生成" : "Continue Creating"}
-                </Link>
-              </div>
+              <Link
+                href={`/${locale}/generate`}
+                className="rounded-2xl border border-white/10 bg-white/[0.03] px-6 py-3 text-center text-sm text-zinc-200"
+              >
+                {isZh ? "继续生成" : "Continue Creating"}
+              </Link>
             </div>
           </div>
         </div>
       </section>
 
       <section className="mx-auto max-w-7xl px-6 py-12">
-        <div className="grid gap-6 xl:grid-cols-4">
+        <div className="grid gap-6 xl:grid-cols-5">
           <Link
             href={`/${locale}/jobs`}
-            className="rounded-[28px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-6 transition hover:-translate-y-1 hover:border-emerald-400/20"
+            className="rounded-[28px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-6"
           >
-            <div className="text-sm text-zinc-400">{isZh ? "任务中心" : "Jobs Center"}</div>
+            <div className="text-sm text-zinc-400">{isZh ? "任务中心" : "Jobs"}</div>
             <div className="mt-3 text-2xl font-bold text-white">{isZh ? "查看任务进度" : "Track Jobs"}</div>
-            <div className="mt-3 text-sm leading-7 text-zinc-400">
-              {isZh ? "查看任务状态、进度、结果和失败原因。" : "Check job status, progress, results, and errors."}
-            </div>
           </Link>
 
           <Link
             href={`/${locale}/history`}
-            className="rounded-[28px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-6 transition hover:-translate-y-1 hover:border-emerald-400/20"
+            className="rounded-[28px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-6"
           >
             <div className="text-sm text-zinc-400">{isZh ? "历史记录" : "History"}</div>
             <div className="mt-3 text-2xl font-bold text-white">{isZh ? "查看生成历史" : "View History"}</div>
-            <div className="mt-3 text-sm leading-7 text-zinc-400">
-              {isZh ? "查看已成功写入的生成记录与结果入口。" : "Open your successful generation history and result links."}
-            </div>
+          </Link>
+
+          <Link
+            href={`/${locale}/activity`}
+            className="rounded-[28px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-6"
+          >
+            <div className="text-sm text-zinc-400">{isZh ? "活动记录" : "Activity"}</div>
+            <div className="mt-3 text-2xl font-bold text-white">{isZh ? "查看行为日志" : "View Activity"}</div>
           </Link>
 
           <Link
             href={`/${locale}/billing`}
-            className="rounded-[28px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-6 transition hover:-translate-y-1 hover:border-emerald-400/20"
+            className="rounded-[28px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-6"
           >
             <div className="text-sm text-zinc-400">{isZh ? "套餐管理" : "Plans"}</div>
             <div className="mt-3 text-2xl font-bold text-white">{isZh ? "升级或查看方案" : "Upgrade Plans"}</div>
-            <div className="mt-3 text-sm leading-7 text-zinc-400">
-              {isZh ? "根据创作频率和项目规模选择合适套餐。" : "Choose the right plan based on your production needs."}
-            </div>
           </Link>
 
           {isAdmin ? (
             <Link
               href={`/${locale}/admin`}
-              className="rounded-[28px] border border-emerald-400/20 bg-gradient-to-b from-emerald-400/10 to-zinc-950 p-6 transition hover:-translate-y-1"
+              className="rounded-[28px] border border-emerald-400/20 bg-gradient-to-b from-emerald-400/10 to-zinc-950 p-6"
             >
               <div className="text-sm text-emerald-300">{isZh ? "管理员入口" : "Admin Access"}</div>
               <div className="mt-3 text-2xl font-bold text-white">{isZh ? "进入后台" : "Open Admin"}</div>
-              <div className="mt-3 text-sm leading-7 text-zinc-300">
-                {isZh ? "你当前拥有管理员权限，可进入后台管理。"
- : "You currently have admin access and can open the dashboard."}
-              </div>
             </Link>
           ) : (
             <div className="rounded-[28px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-6">
               <div className="text-sm text-zinc-400">{isZh ? "账户操作" : "Account Action"}</div>
               <div className="mt-3 text-2xl font-bold text-white">{isZh ? "退出登录" : "Sign Out"}</div>
-              <div className="mt-3 text-sm leading-7 text-zinc-400">
-                {isZh ? "如果你需要切换账户，可以安全退出当前登录状态。"
- : "Sign out safely if you want to switch to another account."}
-              </div>
               <button
                 onClick={handleSignOut}
                 disabled={signingOut}
-                className="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-3 text-sm text-zinc-200 transition hover:bg-white/[0.07] disabled:opacity-50"
+                className="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-3 text-sm text-zinc-200 disabled:opacity-50"
               >
                 {signingOut
                   ? isZh
@@ -422,22 +353,8 @@ export default function AccountPage() {
       <section className="mx-auto max-w-7xl px-6 py-12">
         <div className="grid gap-6 xl:grid-cols-2">
           <div className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-7">
-            <div className="mb-5 flex items-center justify-between gap-3">
-              <div>
-                <div className="text-sm font-medium text-emerald-300">
-                  {isZh ? "最近订单" : "Recent Orders"}
-                </div>
-                <div className="mt-2 text-3xl font-bold text-white">
-                  {isZh ? "你的支付记录" : "Your Payment Activity"}
-                </div>
-              </div>
-
-              <Link
-                href={`/${locale}/billing`}
-                className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-zinc-200"
-              >
-                {isZh ? "查看套餐" : "View Plans"}
-              </Link>
+            <div className="mb-5 text-3xl font-bold text-white">
+              {isZh ? "最近订单" : "Recent Orders"}
             </div>
 
             {recentOrders.length === 0 ? (
@@ -447,18 +364,11 @@ export default function AccountPage() {
             ) : (
               <div className="space-y-4">
                 {recentOrders.map((item) => (
-                  <div
-                    key={item.id}
-                    className="rounded-[24px] border border-white/8 bg-black/25 p-5"
-                  >
+                  <div key={item.id} className="rounded-[24px] border border-white/8 bg-black/25 p-5">
                     <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                       <div>
-                        <div className="text-lg font-semibold text-white">
-                          {formatPlan(item.plan)}
-                        </div>
-                        <div className="mt-2 text-sm text-zinc-400">
-                          {formatTime(item.created_at)}
-                        </div>
+                        <div className="text-lg font-semibold text-white">{formatPlan(item.plan)}</div>
+                        <div className="mt-2 text-sm text-zinc-400">{formatTime(item.created_at)}</div>
                       </div>
 
                       <div className="flex flex-wrap gap-2 text-xs">
@@ -480,22 +390,8 @@ export default function AccountPage() {
           </div>
 
           <div className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-7">
-            <div className="mb-5 flex items-center justify-between gap-3">
-              <div>
-                <div className="text-sm font-medium text-emerald-300">
-                  {isZh ? "最近生成" : "Recent Generations"}
-                </div>
-                <div className="mt-2 text-3xl font-bold text-white">
-                  {isZh ? "你的创作活动" : "Your Creation Activity"}
-                </div>
-              </div>
-
-              <Link
-                href={`/${locale}/history`}
-                className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-zinc-200"
-              >
-                {isZh ? "查看全部" : "View All"}
-              </Link>
+            <div className="mb-5 text-3xl font-bold text-white">
+              {isZh ? "最近生成" : "Recent Generations"}
             </div>
 
             {recentGenerations.length === 0 ? (
@@ -505,18 +401,13 @@ export default function AccountPage() {
             ) : (
               <div className="space-y-4">
                 {recentGenerations.map((item) => (
-                  <div
-                    key={item.id}
-                    className="rounded-[24px] border border-white/8 bg-black/25 p-5"
-                  >
+                  <div key={item.id} className="rounded-[24px] border border-white/8 bg-black/25 p-5">
                     <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                       <div>
                         <div className="text-lg font-semibold text-white">
                           {item.file_name || (isZh ? "未命名项目" : "Untitled Project")}
                         </div>
-                        <div className="mt-2 text-sm text-zinc-400">
-                          {formatTime(item.created_at)}
-                        </div>
+                        <div className="mt-2 text-sm text-zinc-400">{formatTime(item.created_at)}</div>
                       </div>
 
                       <div className="flex flex-wrap gap-2 text-xs">
@@ -546,40 +437,6 @@ export default function AccountPage() {
                 ))}
               </div>
             )}
-          </div>
-        </div>
-      </section>
-
-      <section className="mx-auto max-w-7xl px-6 py-16">
-        <div className="rounded-[32px] border border-white/10 bg-gradient-to-r from-zinc-900 via-zinc-900 to-zinc-950 p-8 shadow-[0_10px_40px_rgba(0,0,0,0.25)]">
-          <div className="max-w-5xl">
-            <div className="text-sm font-medium text-emerald-300">
-              {isZh ? "账户建议" : "Recommendations"}
-            </div>
-            <h2 className="mt-3 text-4xl font-bold leading-tight text-white">
-              {isZh ? "当创作频率提升，升级套餐会让流程更顺" : "As your workflow grows, upgrading makes the process smoother"}
-            </h2>
-            <p className="mt-4 text-base leading-8 text-zinc-300">
-              {isZh
-                ? "如果你已经开始高频生成、持续测试剧本、或者正在做团队项目，那么更高等级的套餐会让你的生成流程更稳定，也更适合作为日常生产工具。"
-                : "If you are generating more often, testing scripts regularly, or working on team projects, a higher plan will make your workflow more stable and better suited for daily production."}
-            </p>
-
-            <div className="mt-8 flex flex-wrap gap-4">
-              <Link
-                href={`/${locale}/billing`}
-                className="rounded-2xl bg-emerald-400 px-6 py-3 text-sm font-semibold text-black transition hover:bg-emerald-300"
-              >
-                {isZh ? "查看套餐方案" : "View Pricing"}
-              </Link>
-
-              <Link
-                href={`/${locale}/checkout?plan=pro`}
-                className="rounded-2xl border border-white/20 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/[0.05]"
-              >
-                {isZh ? "升级到 Pro" : "Upgrade to Pro"}
-              </Link>
-            </div>
           </div>
         </div>
       </section>
