@@ -13,6 +13,14 @@ type StoryboardItem = {
   desc: string;
 };
 
+type ShotPromptItem = {
+  shot: number;
+  title: string;
+  zhPrompt: string;
+  enPrompt: string;
+  negativePrompt: string;
+};
+
 type StructuredResultPayload = {
   title: string;
   aiTitle: string;
@@ -184,6 +192,27 @@ function buildExportText(payload: StructuredResultPayload, isZh: boolean) {
   return lines.join("\n");
 }
 
+function buildPromptExportText(prompts: ShotPromptItem[], isZh: boolean) {
+  const lines: string[] = [];
+
+  prompts.forEach((item) => {
+    lines.push(`${isZh ? "镜头" : "Shot"} ${item.shot} - ${item.title}`);
+    lines.push(isZh ? "【中文 Prompt】" : "[Chinese Prompt]");
+    lines.push(item.zhPrompt);
+    lines.push("");
+    lines.push(isZh ? "【English Prompt】" : "[English Prompt]");
+    lines.push(item.enPrompt);
+    lines.push("");
+    lines.push(isZh ? "【负面提示词】" : "[Negative Prompt]");
+    lines.push(item.negativePrompt);
+    lines.push("");
+    lines.push("--------------------------------------------------");
+    lines.push("");
+  });
+
+  return lines.join("\n");
+}
+
 export default function ResultPage() {
   const pathname = usePathname();
   const router = useRouter();
@@ -197,6 +226,9 @@ export default function ResultPage() {
   const [payload, setPayload] = useState<StructuredResultPayload | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [copyMessage, setCopyMessage] = useState("");
+  const [shotPrompts, setShotPrompts] = useState<ShotPromptItem[]>([]);
+  const [promptLoading, setPromptLoading] = useState(false);
+  const [promptInfo, setPromptInfo] = useState("");
 
   useEffect(() => {
     bootstrap();
@@ -336,6 +368,11 @@ export default function ResultPage() {
     setCopyMessage(isZh ? "原始剧本已复制" : "Original script copied");
   }
 
+  async function copyPromptText(text: string) {
+    await navigator.clipboard.writeText(text);
+    setCopyMessage(isZh ? "Prompt 已复制" : "Prompt copied");
+  }
+
   function exportJson() {
     if (!payload) return;
     const fileName = `${payload.title || "result"}.json`;
@@ -347,6 +384,54 @@ export default function ResultPage() {
     const fileName = `${payload.title || "result"}.txt`;
     const text = buildExportText(payload, isZh);
     downloadTextFile(fileName, text);
+  }
+
+  function exportPromptTxt() {
+    if (!payload || shotPrompts.length === 0) return;
+    const fileName = `${payload.title || "result"}-shot-prompts.txt`;
+    const text = buildPromptExportText(shotPrompts, isZh);
+    downloadTextFile(fileName, text);
+  }
+
+  async function handleGenerateShotPrompts() {
+    if (!payload) return;
+
+    setPromptLoading(true);
+    setPromptInfo("");
+
+    try {
+      const res = await fetch("/api/generate-shot-prompts", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          locale,
+          result: payload,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.error || (isZh ? "分镜 Prompt 生成失败" : "Prompt generation failed"));
+      }
+
+      setShotPrompts(Array.isArray(data?.prompts) ? data.prompts : []);
+      if (data?.provider && data?.model) {
+        setPromptInfo(`${data.provider} / ${data.model}`);
+      }
+    } catch (error) {
+      setPromptInfo(
+        error instanceof Error
+          ? error.message
+          : isZh
+          ? "分镜 Prompt 生成失败"
+          : "Prompt generation failed"
+      );
+    } finally {
+      setPromptLoading(false);
+    }
   }
 
   if (loading) {
@@ -409,8 +494,8 @@ export default function ResultPage() {
 
             <p className="mt-6 max-w-2xl text-lg leading-8 text-zinc-300">
               {isZh
-                ? "这里会展示剧本解析后的结构化结果，包括项目信息、剧情摘要、角色列表、分镜脚本、剧本识别信息和封面文案建议。"
-                : "This page shows your structured output, including project info, story summary, characters, storyboard, preprocess info, and cover copy suggestions."}
+                ? "这里会展示剧本解析后的结构化结果，包括项目信息、剧情摘要、角色列表、分镜脚本、剧本识别信息、封面文案建议，以及下一步可直接用于出图的分镜 Prompt。"
+                : "This page shows your structured output, including project info, story summary, characters, storyboard, preprocess info, cover copy, and image-ready shot prompts for the next production step."}
             </p>
 
             <div className="mt-10 grid gap-4 sm:grid-cols-4">
@@ -821,6 +906,132 @@ export default function ResultPage() {
           </section>
 
           <section className="mx-auto max-w-7xl px-6 py-12">
+            <div className="rounded-[32px] border border-emerald-400/20 bg-gradient-to-b from-emerald-400/10 to-zinc-950 p-7">
+              <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <div className="text-sm font-medium text-emerald-300">
+                    {isZh ? "AI 出图 Prompt" : "AI Image Prompts"}
+                  </div>
+                  <div className="mt-2 text-3xl font-bold text-white">
+                    {isZh ? "把分镜直接变成出图提示词" : "Turn storyboard into image-ready prompts"}
+                  </div>
+                  <div className="mt-3 text-sm leading-7 text-zinc-300">
+                    {isZh
+                      ? "这是 AI 生产链的下一环。你可以先生成每个镜头的出图 Prompt，后续再接图像模型与视频模型。"
+                      : "This is the next stage of the AI production chain. Generate image prompts for each shot before connecting image and video models."}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    onClick={handleGenerateShotPrompts}
+                    disabled={promptLoading}
+                    className="rounded-2xl bg-emerald-400 px-6 py-3 text-sm font-semibold text-black disabled:opacity-50"
+                  >
+                    {promptLoading
+                      ? isZh
+                        ? "生成中..."
+                        : "Generating..."
+                      : isZh
+                      ? "生成分镜 Prompt"
+                      : "Generate Shot Prompts"}
+                  </button>
+
+                  <button
+                    onClick={exportPromptTxt}
+                    disabled={shotPrompts.length === 0}
+                    className="rounded-2xl border border-white/10 bg-white/[0.03] px-6 py-3 text-sm text-zinc-200 disabled:opacity-50"
+                  >
+                    {isZh ? "导出 Prompt" : "Export Prompts"}
+                  </button>
+                </div>
+              </div>
+
+              {promptInfo && (
+                <div className="mb-5 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-zinc-300">
+                  {promptInfo}
+                </div>
+              )}
+
+              {shotPrompts.length === 0 ? (
+                <div className="rounded-[24px] border border-white/8 bg-black/25 p-5 text-zinc-400">
+                  {isZh
+                    ? "还没有生成 Prompt。点击上方按钮后，系统会为每个镜头生成中文 Prompt、英文 Prompt 和负面提示词。"
+                    : "No prompts generated yet. Click the button above to create Chinese prompts, English prompts, and negative prompts for each shot."}
+                </div>
+              ) : (
+                <div className="space-y-5">
+                  {shotPrompts.map((item) => (
+                    <div
+                      key={`${item.shot}-${item.title}`}
+                      className="rounded-[24px] border border-white/8 bg-black/25 p-5"
+                    >
+                      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                        <div>
+                          <div className="inline-flex rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-xs text-emerald-300">
+                            {isZh ? `镜头 ${item.shot}` : `Shot ${item.shot}`}
+                          </div>
+                          <div className="mt-3 text-xl font-semibold text-white">{item.title}</div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => copyPromptText(item.zhPrompt)}
+                            className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-xs text-zinc-200"
+                          >
+                            {isZh ? "复制中文 Prompt" : "Copy ZH Prompt"}
+                          </button>
+                          <button
+                            onClick={() => copyPromptText(item.enPrompt)}
+                            className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-xs text-zinc-200"
+                          >
+                            {isZh ? "复制英文 Prompt" : "Copy EN Prompt"}
+                          </button>
+                          <button
+                            onClick={() => copyPromptText(item.negativePrompt)}
+                            className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-xs text-zinc-200"
+                          >
+                            {isZh ? "复制负面词" : "Copy Negative"}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-4 xl:grid-cols-3">
+                        <div className="rounded-[20px] border border-white/8 bg-zinc-950 p-4">
+                          <div className="text-sm font-medium text-emerald-300">
+                            {isZh ? "中文 Prompt" : "Chinese Prompt"}
+                          </div>
+                          <div className="mt-3 whitespace-pre-wrap text-sm leading-7 text-zinc-200">
+                            {item.zhPrompt}
+                          </div>
+                        </div>
+
+                        <div className="rounded-[20px] border border-white/8 bg-zinc-950 p-4">
+                          <div className="text-sm font-medium text-emerald-300">
+                            {isZh ? "英文 Prompt" : "English Prompt"}
+                          </div>
+                          <div className="mt-3 whitespace-pre-wrap text-sm leading-7 text-zinc-200">
+                            {item.enPrompt}
+                          </div>
+                        </div>
+
+                        <div className="rounded-[20px] border border-white/8 bg-zinc-950 p-4">
+                          <div className="text-sm font-medium text-emerald-300">
+                            {isZh ? "负面提示词" : "Negative Prompt"}
+                          </div>
+                          <div className="mt-3 whitespace-pre-wrap text-sm leading-7 text-zinc-200">
+                            {item.negativePrompt}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+
+          <section className="mx-auto max-w-7xl px-6 py-12">
             <div className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-7">
               <div className="mb-5 flex items-center justify-between gap-3">
                 <div>
@@ -854,8 +1065,8 @@ export default function ResultPage() {
 
               <p className="relative mx-auto mt-4 max-w-3xl text-base leading-8 text-zinc-200">
                 {isZh
-                  ? "你可以返回任务中心查看全部任务，也可以继续上传新剧本开始下一轮生成。"
-                  : "You can go back to the jobs center or upload a new script to start the next generation."}
+                  ? "你现在已经能把剧本解析成结构化结果，并进一步生成出图 Prompt。下一步就可以继续接入图片生成。"
+                  : "You can now turn scripts into structured results and then into image-ready prompts. The next step is connecting image generation."}
               </p>
 
               <div className="relative mt-8 flex flex-wrap items-center justify-center gap-4">
