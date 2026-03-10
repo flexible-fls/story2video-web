@@ -38,7 +38,7 @@ type OrderRow = {
   created_at: string;
 };
 
-type TabKey = "overview" | "users" | "orders" | "generations";
+type TabKey = "overview" | "users" | "orders" | "generations" | "grant";
 
 export default function AdminPage() {
   const pathname = usePathname();
@@ -58,6 +58,12 @@ export default function AdminPage() {
   const [planFilter, setPlanFilter] = useState("all");
   const [actionMessage, setActionMessage] = useState("");
   const [updatingUserId, setUpdatingUserId] = useState("");
+
+  const [grantEmail, setGrantEmail] = useState("");
+  const [grantPlan, setGrantPlan] = useState<"free" | "pro" | "studio">("pro");
+  const [grantAmount, setGrantAmount] = useState("0");
+  const [grantMethod, setGrantMethod] = useState("manual_grant");
+  const [grantLoading, setGrantLoading] = useState(false);
 
   useEffect(() => {
     loadAdminData();
@@ -137,6 +143,47 @@ export default function AdminPage() {
       isZh ? `已成功修改用户套餐为 ${formatPlan(nextPlan)}` : `Plan updated to ${formatPlan(nextPlan)}`
     );
     setUpdatingUserId("");
+  }
+
+  async function handleGrantPlan() {
+    if (!grantEmail.trim()) {
+      setActionMessage(isZh ? "请先填写用户邮箱" : "Please enter a user email first");
+      return;
+    }
+
+    setGrantLoading(true);
+    setActionMessage("");
+
+    const amountNumber = Number(grantAmount || "0");
+
+    const { error } = await supabase.rpc("admin_grant_plan", {
+      target_user_email: grantEmail.trim(),
+      target_plan: grantPlan,
+      target_amount: Number.isFinite(amountNumber) ? amountNumber : 0,
+      target_payment_method: grantMethod.trim() || "manual_grant",
+    });
+
+    if (error) {
+      setActionMessage(
+        isZh ? `补单失败：${error.message}` : `Grant failed: ${error.message}`
+      );
+      setGrantLoading(false);
+      return;
+    }
+
+    setActionMessage(
+      isZh
+        ? `已成功给 ${grantEmail.trim()} 开通 ${formatPlan(grantPlan)}`
+        : `Successfully granted ${formatPlan(grantPlan)} to ${grantEmail.trim()}`
+    );
+
+    setGrantEmail("");
+    setGrantPlan("pro");
+    setGrantAmount("0");
+    setGrantMethod("manual_grant");
+    setGrantLoading(false);
+
+    await loadAdminData();
   }
 
   const totalUsers = profiles.length;
@@ -257,8 +304,8 @@ export default function AdminPage() {
 
           <p className="mt-3 text-zinc-400">
             {isZh
-              ? "查看全站用户、订单、生成情况，并支持基础搜索、套餐筛选和手动修改用户套餐。"
-              : "Review platform users, orders, and generations with search, plan filters, and manual plan updates."}
+              ? "查看全站用户、订单、生成情况，并支持基础搜索、套餐筛选、手动修改用户套餐与手动补单。"
+              : "Review platform users, orders, and generations with search, filters, manual plan edits, and manual grants."}
           </p>
         </div>
 
@@ -326,6 +373,16 @@ export default function AdminPage() {
                 }`}
               >
                 {isZh ? "生成记录" : "Generations"}
+              </button>
+              <button
+                onClick={() => setActiveTab("grant")}
+                className={`rounded-xl px-4 py-2 text-sm ${
+                  activeTab === "grant"
+                    ? "bg-emerald-400 text-black"
+                    : "border border-white/10 bg-zinc-950 text-zinc-300"
+                }`}
+              >
+                {isZh ? "手动补单" : "Manual Grant"}
               </button>
             </div>
 
@@ -601,7 +658,91 @@ export default function AdminPage() {
             </div>
           </div>
         )}
+
+        {activeTab === "grant" && (
+          <div className="mt-8 rounded-3xl border border-white/10 bg-zinc-900 p-6">
+            <div className="mb-4 text-xl font-semibold">
+              {isZh ? "手动补单 / 赠送套餐" : "Manual Grant / Gift Plan"}
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="rounded-2xl bg-zinc-950 p-5">
+                <label className="mb-2 block text-sm text-zinc-400">
+                  {isZh ? "用户邮箱" : "User Email"}
+                </label>
+                <input
+                  value={grantEmail}
+                  onChange={(e) => setGrantEmail(e.target.value)}
+                  placeholder={isZh ? "请输入用户邮箱" : "Enter user email"}
+                  className="h-11 w-full rounded-xl border border-white/10 bg-zinc-900 px-4 text-sm text-white outline-none placeholder:text-zinc-500"
+                />
+              </div>
+
+              <div className="rounded-2xl bg-zinc-950 p-5">
+                <label className="mb-2 block text-sm text-zinc-400">
+                  {isZh ? "套餐类型" : "Plan Type"}
+                </label>
+                <select
+                  value={grantPlan}
+                  onChange={(e) => setGrantPlan(e.target.value as "free" | "pro" | "studio")}
+                  className="h-11 w-full rounded-xl border border-white/10 bg-zinc-900 px-4 text-sm text-white outline-none"
+                >
+                  <option value="free">Free</option>
+                  <option value="pro">Pro</option>
+                  <option value="studio">Studio</option>
+                </select>
+              </div>
+
+              <div className="rounded-2xl bg-zinc-950 p-5">
+                <label className="mb-2 block text-sm text-zinc-400">
+                  {isZh ? "订单金额（分）" : "Order Amount (cents)"}
+                </label>
+                <input
+                  value={grantAmount}
+                  onChange={(e) => setGrantAmount(e.target.value)}
+                  placeholder={isZh ? "例如 9900 / 39900 / 0" : "For example 9900 / 39900 / 0"}
+                  className="h-11 w-full rounded-xl border border-white/10 bg-zinc-900 px-4 text-sm text-white outline-none placeholder:text-zinc-500"
+                />
+              </div>
+
+              <div className="rounded-2xl bg-zinc-950 p-5">
+                <label className="mb-2 block text-sm text-zinc-400">
+                  {isZh ? "支付方式标记" : "Payment Method Label"}
+                </label>
+                <input
+                  value={grantMethod}
+                  onChange={(e) => setGrantMethod(e.target.value)}
+                  placeholder={isZh ? "例如 manual_grant / offline / wechat_manual" : "For example manual_grant / offline / wechat_manual"}
+                  className="h-11 w-full rounded-xl border border-white/10 bg-zinc-900 px-4 text-sm text-white outline-none placeholder:text-zinc-500"
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 rounded-2xl bg-zinc-950 p-5 text-sm text-zinc-400">
+              {isZh
+                ? "说明：执行后会同时更新用户套餐，并自动写入一条 paid 订单记录。适合人工收款、赠送体验或补单场景。"
+                : "Note: This updates the user's plan and also inserts a paid order record. Good for offline payments, gifts, or manual fulfillment."}
+            </div>
+
+            <div className="mt-6">
+              <button
+                onClick={handleGrantPlan}
+                disabled={grantLoading}
+                className="rounded-xl bg-emerald-400 px-6 py-3 text-sm font-semibold text-black disabled:opacity-50"
+              >
+                {grantLoading
+                  ? isZh
+                    ? "处理中..."
+                    : "Processing..."
+                  : isZh
+                  ? "确认补单 / 开通套餐"
+                  : "Grant Plan Now"}
+              </button>
+            </div>
+          </div>
+        )}
       </section>
     </main>
   );
 }
+
