@@ -7,6 +7,7 @@ import LanguageSwitch from "@/components/LanguageSwitch";
 import { supabase } from "@/lib/supabase";
 import mammoth from "mammoth";
 import * as pdfjsLib from "pdfjs-dist";
+import { PRICING_PLANS, formatPlanPriceCny } from "@/lib/pricing";
 
 type ProfileRow = {
   id: string;
@@ -386,20 +387,6 @@ export default function HomePage() {
                 <div className="mt-3 text-2xl font-bold text-white">{isZh ? "进度可追踪" : "Track Progress"}</div>
               </div>
             </div>
-
-            <div className="mt-10 rounded-[32px] border border-white/10 bg-gradient-to-r from-zinc-900/90 to-zinc-950/90 p-7 shadow-[0_20px_60px_rgba(0,0,0,0.25)]">
-              <div className="text-sm font-medium text-emerald-300">
-                {isZh ? "核心价值" : "Core Value"}
-              </div>
-              <div className="mt-3 text-3xl font-bold leading-tight text-white md:text-5xl">
-                {isZh ? "不只是生成，而是帮你搭建完整的内容生产流程" : "More than generation — a full content workflow"}
-              </div>
-              <p className="mt-5 max-w-4xl text-base leading-8 text-zinc-300">
-                {isZh
-                  ? "传统短剧和漫剧制作里，剧本拆解、角色整理、分镜规划、爆点提炼都非常耗时。FulushouVideo 把这些高频重复工作自动化，让你从手动整理升级到任务驱动生成。"
-                  : "Traditional short-drama and comic production requires script breakdown, character sorting, storyboard planning, and hook drafting. FulushouVideo automates those repetitive tasks and upgrades your workflow into a task-driven system."}
-              </p>
-            </div>
           </div>
 
           <div className="relative">
@@ -742,91 +729,70 @@ export default function HomePage() {
           </h2>
           <p className="mt-4 max-w-3xl text-base leading-8 text-zinc-300">
             {isZh
-              ? "无论你是想先体验 AI 解析，还是已经进入持续内容生产阶段，都可以根据额度和使用频率选择合适的方案。"
-              : "Whether you are just trying AI analysis or already running continuous production, choose the plan that matches your usage and quota needs."}
+              ? "首页与 billing 页面现在使用同一份套餐配置，价格、额度和文案会保持一致。"
+              : "The homepage and billing page now use the same pricing source, so plan prices, quotas, and copy stay consistent."}
           </p>
         </div>
 
         <div className="grid gap-6 xl:grid-cols-3">
-          <div className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-7 shadow-[0_20px_60px_rgba(0,0,0,0.22)]">
-            <div className="text-sm font-medium text-zinc-400">Free</div>
-            <div className="mt-3 text-4xl font-bold text-white">
-              {isZh ? "免费体验" : "Free Trial"}
-            </div>
-            <div className="mt-4 text-2xl font-semibold text-white">¥0</div>
-            <div className="mt-2 text-sm text-zinc-400">
-              {isZh ? "适合初次体验与测试流程" : "Best for first-time testing"}
-            </div>
-
-            <div className="mt-6 space-y-3 text-sm text-zinc-300">
-              <div>• {isZh ? "每月 5 次基础生成额度" : "5 generations per month"}</div>
-              <div>• {isZh ? "支持剧本上传与 AI 解析" : "Script upload and AI analysis"}</div>
-              <div>• {isZh ? "查看结果页与任务记录" : "Result page and job history"}</div>
-            </div>
-
-            <Link
-              href={`/${locale}/billing`}
-              className="mt-8 block rounded-2xl border border-white/10 bg-white/[0.03] px-6 py-3 text-center text-sm text-zinc-200 transition hover:bg-white/[0.07]"
+          {PRICING_PLANS.map((plan) => (
+            <div
+              key={plan.key}
+              className={`relative rounded-[32px] p-7 shadow-[0_20px_60px_rgba(0,0,0,0.22)] ${
+                plan.key === "pro"
+                  ? "border border-emerald-400/20 bg-gradient-to-b from-emerald-400/10 to-zinc-950"
+                  : "border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950"
+              }`}
             >
-              {isZh ? "查看方案" : "View Plan"}
-            </Link>
-          </div>
+              {plan.badgeZh || plan.badgeEn ? (
+                <div className="absolute right-5 top-5 rounded-full border border-emerald-400/20 bg-emerald-400/15 px-3 py-1 text-xs text-emerald-300">
+                  {isZh ? plan.badgeZh : plan.badgeEn}
+                </div>
+              ) : null}
 
-          <div className="relative rounded-[32px] border border-emerald-400/20 bg-gradient-to-b from-emerald-400/10 to-zinc-950 p-7 shadow-[0_25px_80px_rgba(16,185,129,0.10)]">
-            <div className="absolute right-5 top-5 rounded-full border border-emerald-400/20 bg-emerald-400/15 px-3 py-1 text-xs text-emerald-300">
-              {isZh ? "推荐" : "Popular"}
-            </div>
+              <div className={`text-sm font-medium ${plan.key === "pro" ? "text-emerald-300" : "text-zinc-400"}`}>
+                {plan.name}
+              </div>
 
-            <div className="text-sm font-medium text-emerald-300">Pro</div>
-            <div className="mt-3 text-4xl font-bold text-white">
-              {isZh ? "进阶创作" : "Pro Creator"}
-            </div>
-            <div className="mt-4 text-2xl font-semibold text-white">
-              {isZh ? "按你的后台价格显示" : "Use your billing price"}
-            </div>
-            <div className="mt-2 text-sm text-zinc-300">
-              {isZh ? "适合稳定使用、持续改稿和批量测试" : "For regular creators and stable production"}
-            </div>
+              <div className="mt-3 text-4xl font-bold text-white">
+                {isZh ? plan.zhTitle : plan.enTitle}
+              </div>
 
-            <div className="mt-6 space-y-3 text-sm text-zinc-200">
-              <div>• {isZh ? "每月 50 次生成额度" : "50 generations per month"}</div>
-              <div>• {isZh ? "更适合连续剧本测试与迭代" : "Better for continuous script iteration"}</div>
-              <div>• {isZh ? "适合短剧 / 漫剧生产前期" : "Suitable for early drama/comic production"}</div>
-            </div>
+              <div className="mt-4 text-2xl font-semibold text-white">
+                {formatPlanPriceCny(plan.priceCnyMonthly)}
+                <span className="ml-1 text-sm font-normal text-zinc-400">
+                  /{isZh ? "月" : "mo"}
+                </span>
+              </div>
 
-            <Link
-              href={`/${locale}/billing`}
-              className="mt-8 block rounded-2xl bg-emerald-400 px-6 py-3 text-center text-sm font-semibold text-black transition hover:bg-emerald-300"
-            >
-              {isZh ? "升级到 Pro" : "Upgrade to Pro"}
-            </Link>
-          </div>
+              <div className="mt-2 text-sm text-zinc-300">
+                {isZh ? plan.zhDesc : plan.enDesc}
+              </div>
 
-          <div className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-7 shadow-[0_20px_60px_rgba(0,0,0,0.22)]">
-            <div className="text-sm font-medium text-zinc-400">Studio</div>
-            <div className="mt-3 text-4xl font-bold text-white">
-              {isZh ? "团队与高频生产" : "Studio Workflow"}
-            </div>
-            <div className="mt-4 text-2xl font-semibold text-white">
-              {isZh ? "按你的后台价格显示" : "Use your billing price"}
-            </div>
-            <div className="mt-2 text-sm text-zinc-400">
-              {isZh ? "适合高频创作与长期项目" : "For high-frequency and long-term projects"}
-            </div>
+              <div className="mt-6 space-y-3 text-sm text-zinc-200">
+                {(isZh ? plan.zhFeatures : plan.enFeatures).map((item) => (
+                  <div key={item}>• {item}</div>
+                ))}
+              </div>
 
-            <div className="mt-6 space-y-3 text-sm text-zinc-300">
-              <div>• {isZh ? "无限额度体验" : "Unlimited usage experience"}</div>
-              <div>• {isZh ? "更适合长期内容生产" : "Best for ongoing production"}</div>
-              <div>• {isZh ? "适合工作室与内容团队" : "Built for teams and studios"}</div>
+              <Link
+                href={`/${locale}/billing`}
+                className={`mt-8 block rounded-2xl px-6 py-3 text-center text-sm transition ${
+                  plan.key === "pro"
+                    ? "bg-emerald-400 font-semibold text-black hover:bg-emerald-300"
+                    : "border border-white/10 bg-white/[0.03] text-zinc-200 hover:bg-white/[0.07]"
+                }`}
+              >
+                {plan.key === "pro"
+                  ? isZh
+                    ? "升级到 Pro"
+                    : "Upgrade to Pro"
+                  : isZh
+                  ? "查看方案"
+                  : "View Plan"}
+              </Link>
             </div>
-
-            <Link
-              href={`/${locale}/billing`}
-              className="mt-8 block rounded-2xl border border-white/10 bg-white/[0.03] px-6 py-3 text-center text-sm text-zinc-200 transition hover:bg-white/[0.07]"
-            >
-              {isZh ? "查看 Studio" : "View Studio"}
-            </Link>
-          </div>
+          ))}
         </div>
       </section>
 
@@ -935,42 +901,18 @@ export default function HomePage() {
           <div>
             <div className="text-sm font-semibold text-white">{isZh ? "产品" : "Product"}</div>
             <div className="mt-4 space-y-3 text-sm text-zinc-400">
-              <div>
-                <a href="#features" className="transition hover:text-white">
-                  {isZh ? "功能能力" : "Features"}
-                </a>
-              </div>
-              <div>
-                <a href="#pricing" className="transition hover:text-white">
-                  {isZh ? "套餐方案" : "Pricing"}
-                </a>
-              </div>
-              <div>
-                <a href="#workflow" className="transition hover:text-white">
-                  {isZh ? "使用流程" : "Workflow"}
-                </a>
-              </div>
+              <div><a href="#features" className="transition hover:text-white">{isZh ? "功能能力" : "Features"}</a></div>
+              <div><a href="#pricing" className="transition hover:text-white">{isZh ? "套餐方案" : "Pricing"}</a></div>
+              <div><a href="#workflow" className="transition hover:text-white">{isZh ? "使用流程" : "Workflow"}</a></div>
             </div>
           </div>
 
           <div>
             <div className="text-sm font-semibold text-white">{isZh ? "入口" : "Entry"}</div>
             <div className="mt-4 space-y-3 text-sm text-zinc-400">
-              <div>
-                <Link href={`/${locale}/generate`} className="transition hover:text-white">
-                  {isZh ? "生成页" : "Generate"}
-                </Link>
-              </div>
-              <div>
-                <Link href={`/${locale}/jobs`} className="transition hover:text-white">
-                  {isZh ? "任务中心" : "Jobs"}
-                </Link>
-              </div>
-              <div>
-                <Link href={`/${locale}/billing`} className="transition hover:text-white">
-                  {isZh ? "套餐页" : "Billing"}
-                </Link>
-              </div>
+              <div><Link href={`/${locale}/generate`} className="transition hover:text-white">{isZh ? "生成页" : "Generate"}</Link></div>
+              <div><Link href={`/${locale}/jobs`} className="transition hover:text-white">{isZh ? "任务中心" : "Jobs"}</Link></div>
+              <div><Link href={`/${locale}/billing`} className="transition hover:text-white">{isZh ? "套餐页" : "Billing"}</Link></div>
             </div>
           </div>
 
@@ -979,26 +921,11 @@ export default function HomePage() {
             <div className="mt-4 space-y-3 text-sm text-zinc-400">
               {isAuthed ? (
                 <>
-                  <div>
-                    <Link href={`/${locale}/account`} className="transition hover:text-white">
-                      {isZh ? "账户中心" : "Account Center"}
-                    </Link>
-                  </div>
-                  <div>
-                    <button
-                      onClick={handleSignOut}
-                      className="transition hover:text-white"
-                    >
-                      {isZh ? "退出登录" : "Sign Out"}
-                    </button>
-                  </div>
+                  <div><Link href={`/${locale}/account`} className="transition hover:text-white">{isZh ? "账户中心" : "Account Center"}</Link></div>
+                  <div><button onClick={handleSignOut} className="transition hover:text-white">{isZh ? "退出登录" : "Sign Out"}</button></div>
                 </>
               ) : (
-                <div>
-                  <Link href={`/${locale}/auth`} className="transition hover:text-white">
-                    {isZh ? "登录 / 注册" : "Login / Sign Up"}
-                  </Link>
-                </div>
+                <div><Link href={`/${locale}/auth`} className="transition hover:text-white">{isZh ? "登录 / 注册" : "Login / Sign Up"}</Link></div>
               )}
             </div>
           </div>
