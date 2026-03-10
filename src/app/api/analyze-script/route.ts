@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { openai } from "@/lib/openai";
+import { getAIClient, getAIModel, getAIProvider } from "@/lib/openai";
 
 type StoryboardItem = {
   shot: number;
@@ -151,15 +151,36 @@ function normalizeResult(raw: any, script: string, isZh: boolean): StructuredRes
   };
 }
 
+function simplifyProviderError(errorMessage: string, isZh: boolean) {
+  const message = errorMessage.toLowerCase();
+
+  if (
+    message.includes("insufficient balance") ||
+    message.includes("insufficient_quota") ||
+    message.includes("quota") ||
+    message.includes("429")
+  ) {
+    return isZh
+      ? "AI 服务额度不足，请检查当前模型平台的余额或配额设置。"
+      : "AI provider quota or balance is insufficient.";
+  }
+
+  if (
+    message.includes("api key") ||
+    message.includes("authentication") ||
+    message.includes("unauthorized") ||
+    message.includes("401")
+  ) {
+    return isZh
+      ? "AI 服务密钥无效，请检查环境变量配置。"
+      : "AI provider key is invalid. Please check environment variables.";
+  }
+
+  return errorMessage;
+}
+
 export async function POST(req: Request) {
   try {
-    if (!process.env.OPENAI_API_KEY) {
-      return NextResponse.json(
-        { error: "OPENAI_API_KEY is missing" },
-        { status: 500 }
-      );
-    }
-
     const body = await req.json();
     const script = typeof body?.script === "string" ? body.script.trim() : "";
     const locale = body?.locale === "en" ? "en" : "zh";
@@ -168,6 +189,10 @@ export async function POST(req: Request) {
     if (!script) {
       return NextResponse.json({ error: "missing script" }, { status: 400 });
     }
+
+    const provider = getAIProvider();
+    const client = getAIClient();
+    const model = getAIModel();
 
     const systemPrompt = isZh
       ? `
@@ -233,9 +258,9 @@ Requirements:
 10. each desc should describe both plot action and visual focus
 `;
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0.7,
+    const completion = await client.chat.completions.create({
+      model,
+      temperature: provider === "deepseek" ? 0.5 : 0.7,
       response_format: { type: "json_object" },
       messages: [
         {
@@ -253,7 +278,7 @@ Requirements:
 
     if (!content) {
       return NextResponse.json(
-        { error: "empty model response" },
+        { error: isZh ? "模型返回为空" : "empty model response" },
         { status: 500 }
       );
     }
@@ -263,18 +288,29 @@ Requirements:
       parsed = JSON.parse(content);
     } catch {
       return NextResponse.json(
-        { error: "invalid json from model", raw: content },
+        {
+          error: isZh ? "模型返回的 JSON 无法解析" : "invalid json from model",
+          raw: content,
+        },
         { status: 500 }
       );
     }
 
     const result = normalizeResult(parsed, script, isZh);
 
-    return NextResponse.json({ result });
+    return NextResponse.json({
+      provider,
+      model,
+      result,
+    });
   } catch (error: any) {
+    const locale = "zh";
+    const message =
+      typeof error?.message === "string" ? error.message : "AI analyze failed";
+
     return NextResponse.json(
       {
-        error: error?.message || "AI analyze failed",
+        error: simplifyProviderError(message, locale === "zh"),
       },
       { status: 500 }
     );

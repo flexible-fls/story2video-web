@@ -203,6 +203,7 @@ export default function GeneratePage() {
   const [jobId, setJobId] = useState("");
   const [progress, setProgress] = useState(0);
   const [currentStep, setCurrentStep] = useState(0);
+  const [providerInfo, setProviderInfo] = useState("");
 
   const steps = useMemo(
     () =>
@@ -332,6 +333,7 @@ export default function GeneratePage() {
     setErrorMessage("");
     setProgress(0);
     setCurrentStep(0);
+    setProviderInfo("");
 
     saveDraftScript(text, loadedFileName || undefined);
 
@@ -357,18 +359,18 @@ export default function GeneratePage() {
       setProgress(10);
       setCurrentStep(0);
       await updateJob(createdJobId, "processing", 10, null, null, null, step0);
-      await sleep(300);
+      await sleep(250);
 
       const step1 = buildStepLogs(isZh, 1);
-      setProgress(20);
+      setProgress(22);
       setCurrentStep(1);
-      await updateJob(createdJobId, "processing", 20, null, null, null, step1);
-      await sleep(300);
+      await updateJob(createdJobId, "processing", 22, null, null, null, step1);
+      await sleep(250);
 
       const step2 = buildStepLogs(isZh, 2);
-      setProgress(35);
+      setProgress(38);
       setCurrentStep(2);
-      await updateJob(createdJobId, "processing", 35, null, null, null, step2);
+      await updateJob(createdJobId, "processing", 38, null, null, null, step2);
 
       const analyzeRes = await fetch("/api/analyze-script", {
         method: "POST",
@@ -395,17 +397,21 @@ export default function GeneratePage() {
 
       cacheLegacyResult(aiResult);
 
+      if (analyzeData?.provider && analyzeData?.model) {
+        setProviderInfo(`${analyzeData.provider} / ${analyzeData.model}`);
+      }
+
       const step3 = buildStepLogs(isZh, 3);
-      setProgress(60);
+      setProgress(62);
       setCurrentStep(3);
-      await updateJob(createdJobId, "processing", 60, null, null, null, step3);
-      await sleep(250);
+      await updateJob(createdJobId, "processing", 62, null, null, null, step3);
+      await sleep(200);
 
       const step4 = buildStepLogs(isZh, 4);
-      setProgress(82);
+      setProgress(84);
       setCurrentStep(4);
-      await updateJob(createdJobId, "processing", 82, null, null, null, step4);
-      await sleep(250);
+      await updateJob(createdJobId, "processing", 84, null, null, null, step4);
+      await sleep(200);
 
       const resultUrl = `/${locale}/result?job=${createdJobId}`;
       const step5 = buildStepLogs(isZh, 6);
@@ -497,6 +503,12 @@ export default function GeneratePage() {
           </p>
 
           <div className="mt-4 text-sm text-zinc-500">{quotaText}</div>
+
+          {providerInfo && (
+            <div className="mt-2 text-sm text-emerald-300">
+              {isZh ? "当前模型：" : "Current model: "} {providerInfo}
+            </div>
+          )}
 
           {profile?.status === "banned" && (
             <div className="mt-3 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
@@ -667,8 +679,8 @@ export default function GeneratePage() {
 
             <div className="mt-6 rounded-2xl bg-zinc-950 p-4 text-sm text-zinc-400">
               {isZh
-                ? "这一版已经接入真实 AI 文本解析。生成成功后，系统会把结构化结果写入任务，并跳转到结果页。"
-                : "This version uses real AI text analysis. After success, the structured result is saved into the job and opens the result page."}
+                ? "这一版已经支持多模型切换。当前默认建议用 DeepSeek 跑通流程，后续可通过环境变量切回 OpenAI。"
+                : "This version supports multi-provider switching. DeepSeek is recommended for now, and you can switch back to OpenAI via environment variables later."}
             </div>
           </div>
         </div>
