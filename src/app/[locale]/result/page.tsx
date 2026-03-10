@@ -21,6 +21,14 @@ type ShotPromptItem = {
   negativePrompt: string;
 };
 
+type ShotImageItem = {
+  shot: number;
+  title: string;
+  imageUrl: string;
+  promptUsed: string;
+  revisedPrompt?: string;
+};
+
 type StructuredResultPayload = {
   title: string;
   aiTitle: string;
@@ -39,6 +47,8 @@ type StructuredResultPayload = {
     extractedCharacters: string[];
     extractedSceneHints: string[];
   };
+  shotPrompts?: ShotPromptItem[];
+  shotImages?: ShotImageItem[];
 };
 
 type GenerationJobRow = {
@@ -226,9 +236,13 @@ export default function ResultPage() {
   const [payload, setPayload] = useState<StructuredResultPayload | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [copyMessage, setCopyMessage] = useState("");
+
   const [shotPrompts, setShotPrompts] = useState<ShotPromptItem[]>([]);
+  const [shotImages, setShotImages] = useState<ShotImageItem[]>([]);
   const [promptLoading, setPromptLoading] = useState(false);
+  const [imageLoading, setImageLoading] = useState(false);
   const [promptInfo, setPromptInfo] = useState("");
+  const [imageInfo, setImageInfo] = useState("");
 
   useEffect(() => {
     bootstrap();
@@ -257,7 +271,11 @@ export default function ResultPage() {
       if (error || !data) {
         setErrorMessage(isZh ? "没有找到对应的任务结果" : "Job result not found");
         const legacy = loadLegacyResult();
-        if (legacy) setPayload(legacy);
+        if (legacy) {
+          setPayload(legacy);
+          setShotPrompts(legacy.shotPrompts || []);
+          setShotImages(legacy.shotImages || []);
+        }
         setLoading(false);
         return;
       }
@@ -267,9 +285,15 @@ export default function ResultPage() {
 
       if (row.result_json) {
         setPayload(row.result_json);
+        setShotPrompts(row.result_json.shotPrompts || []);
+        setShotImages(row.result_json.shotImages || []);
       } else {
         const legacy = loadLegacyResult();
-        if (legacy) setPayload(legacy);
+        if (legacy) {
+          setPayload(legacy);
+          setShotPrompts(legacy.shotPrompts || []);
+          setShotImages(legacy.shotImages || []);
+        }
       }
 
       setLoading(false);
@@ -279,6 +303,8 @@ export default function ResultPage() {
     const legacy = loadLegacyResult();
     if (legacy) {
       setPayload(legacy);
+      setShotPrompts(legacy.shotPrompts || []);
+      setShotImages(legacy.shotImages || []);
     } else {
       setErrorMessage(isZh ? "当前没有可展示的结果" : "No result available");
     }
@@ -316,6 +342,139 @@ export default function ResultPage() {
       },
     ];
   }, [payload, isZh]);
+
+  async function persistAssets(
+    nextPrompts?: ShotPromptItem[],
+    nextImages?: ShotImageItem[]
+  ) {
+    if (!payload) return;
+
+    const updatedPayload: StructuredResultPayload = {
+      ...payload,
+      shotPrompts: nextPrompts ?? shotPrompts,
+      shotImages: nextImages ?? shotImages,
+    };
+
+    setPayload(updatedPayload);
+
+    if (!jobId) return;
+
+    await supabase
+      .from("generation_jobs")
+      .update({
+        result_json: updatedPayload,
+      })
+      .eq("id", jobId);
+  }
+
+  async function generatePromptsInternal(currentPayload: StructuredResultPayload) {
+    const res = await fetch("/api/generate-shot-prompts", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        locale,
+        result: currentPayload,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data?.error || (isZh ? "分镜 Prompt 生成失败" : "Prompt generation failed"));
+    }
+
+    const prompts = Array.isArray(data?.prompts) ? (data.prompts as ShotPromptItem[]) : [];
+    const info = data?.provider && data?.model ? `${data.provider} / ${data.model}` : "";
+
+    return { prompts, info };
+  }
+
+  async function handleGenerateShotPrompts() {
+    if (!payload) return;
+
+    setPromptLoading(true);
+    setPromptInfo("");
+
+    try {
+      const { prompts, info } = await generatePromptsInternal(payload);
+      setShotPrompts(prompts);
+      setPromptInfo(info);
+      await persistAssets(prompts, undefined);
+    } catch (error) {
+      setPromptInfo(
+        error instanceof Error
+          ? error.message
+          : isZh
+          ? "分镜 Prompt 生成失败"
+          : "Prompt generation failed"
+      );
+    } finally {
+      setPromptLoading(false);
+    }
+  }
+
+  async function handleGenerateShotImages() {
+    if (!payload) return;
+
+    setImageLoading(true);
+    setImageInfo("");
+
+    try {
+      let prompts = shotPrompts;
+
+      if (prompts.length === 0) {
+        const generated = await generatePromptsInternal(payload);
+        prompts = generated.prompts;
+        setShotPrompts(prompts);
+        setPromptInfo(generated.info);
+        await persistAssets(prompts, undefined);
+      }
+
+      if (prompts.length === 0) {
+        throw new Error(isZh ? "没有可用于生成图片的 Prompt" : "No prompts available for image generation");
+      }
+
+      const res = await fetch("/api/generate-shot-images", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          locale,
+          prompts,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.error || (isZh ? "图片生成失败" : "Image generation failed"));
+      }
+
+      const images = Array.isArray(data?.images) ? (data.images as ShotImageItem[]) : [];
+      setShotImages(images);
+
+      if (data?.provider && data?.model) {
+        setImageInfo(
+          `${data.provider} / ${data.model}${data?.size ? ` / ${data.size}` : ""}${data?.quality ? ` / ${data.quality}` : ""}`
+        );
+      }
+
+      await persistAssets(prompts, images);
+    } catch (error) {
+      setImageInfo(
+        error instanceof Error
+          ? error.message
+          : isZh
+          ? "图片生成失败"
+          : "Image generation failed"
+      );
+    } finally {
+      setImageLoading(false);
+    }
+  }
 
   function formatTime(value?: string) {
     if (!value) return "-";
@@ -393,47 +552,6 @@ export default function ResultPage() {
     downloadTextFile(fileName, text);
   }
 
-  async function handleGenerateShotPrompts() {
-    if (!payload) return;
-
-    setPromptLoading(true);
-    setPromptInfo("");
-
-    try {
-      const res = await fetch("/api/generate-shot-prompts", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          locale,
-          result: payload,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data?.error || (isZh ? "分镜 Prompt 生成失败" : "Prompt generation failed"));
-      }
-
-      setShotPrompts(Array.isArray(data?.prompts) ? data.prompts : []);
-      if (data?.provider && data?.model) {
-        setPromptInfo(`${data.provider} / ${data.model}`);
-      }
-    } catch (error) {
-      setPromptInfo(
-        error instanceof Error
-          ? error.message
-          : isZh
-          ? "分镜 Prompt 生成失败"
-          : "Prompt generation failed"
-      );
-    } finally {
-      setPromptLoading(false);
-    }
-  }
-
   if (loading) {
     return (
       <main className="min-h-screen bg-[#06070a] text-white">
@@ -494,8 +612,8 @@ export default function ResultPage() {
 
             <p className="mt-6 max-w-2xl text-lg leading-8 text-zinc-300">
               {isZh
-                ? "这里会展示剧本解析后的结构化结果，包括项目信息、剧情摘要、角色列表、分镜脚本、剧本识别信息、封面文案建议，以及下一步可直接用于出图的分镜 Prompt。"
-                : "This page shows your structured output, including project info, story summary, characters, storyboard, preprocess info, cover copy, and image-ready shot prompts for the next production step."}
+                ? "这里会展示剧本解析后的结构化结果，包括项目信息、剧情摘要、角色列表、分镜脚本、剧本识别信息、封面文案建议，以及下一步可直接用于出图的分镜 Prompt 和镜头图片。"
+                : "This page shows your structured output, including project info, story summary, characters, storyboard, preprocess info, cover copy, and image-ready shot prompts with generated images."}
             </p>
 
             <div className="mt-10 grid gap-4 sm:grid-cols-4">
@@ -625,31 +743,6 @@ export default function ResultPage() {
                   </div>
                 </div>
               ) : null}
-
-              <div className="mt-6 grid gap-3 sm:grid-cols-2">
-                {job?.result_url ? (
-                  <a
-                    href={job.result_url}
-                    className="rounded-2xl bg-emerald-400 px-6 py-3 text-center text-sm font-semibold text-black transition hover:bg-emerald-300"
-                  >
-                    {isZh ? "打开结果链接" : "Open Result URL"}
-                  </a>
-                ) : (
-                  <Link
-                    href={`/${locale}/jobs`}
-                    className="rounded-2xl bg-emerald-400 px-6 py-3 text-center text-sm font-semibold text-black transition hover:bg-emerald-300"
-                  >
-                    {isZh ? "返回任务中心" : "Back to Jobs"}
-                  </Link>
-                )}
-
-                <Link
-                  href={`/${locale}/generate`}
-                  className="rounded-2xl border border-white/10 bg-white/[0.03] px-6 py-3 text-center text-sm text-zinc-200 transition hover:bg-white/[0.07]"
-                >
-                  {isZh ? "继续生成" : "Generate Again"}
-                </Link>
-              </div>
             </div>
           </div>
         </div>
@@ -917,8 +1010,8 @@ export default function ResultPage() {
                   </div>
                   <div className="mt-3 text-sm leading-7 text-zinc-300">
                     {isZh
-                      ? "这是 AI 生产链的下一环。你可以先生成每个镜头的出图 Prompt，后续再接图像模型与视频模型。"
-                      : "This is the next stage of the AI production chain. Generate image prompts for each shot before connecting image and video models."}
+                      ? "这是 AI 生产链的下一环。先生成每个镜头的 Prompt，再直接生成镜头图。"
+                      : "This is the next stage of the AI production chain. Generate prompts for each shot, then generate shot images directly."}
                   </div>
                 </div>
 
@@ -1032,6 +1125,113 @@ export default function ResultPage() {
           </section>
 
           <section className="mx-auto max-w-7xl px-6 py-12">
+            <div className="rounded-[32px] border border-cyan-400/20 bg-gradient-to-b from-cyan-400/10 to-zinc-950 p-7">
+              <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <div className="text-sm font-medium text-cyan-300">
+                    {isZh ? "镜头图片生成" : "Shot Image Generation"}
+                  </div>
+                  <div className="mt-2 text-3xl font-bold text-white">
+                    {isZh ? "把 Prompt 直接转成镜头图" : "Turn prompts directly into shot images"}
+                  </div>
+                  <div className="mt-3 text-sm leading-7 text-zinc-300">
+                    {isZh
+                      ? "点击后会直接为每个镜头生成图片。生成结果会保存到当前任务结果里，下次打开还能继续看。"
+                      : "Click to generate images for each shot. The results are saved into this job result so they remain available later."}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    onClick={handleGenerateShotImages}
+                    disabled={imageLoading || promptLoading}
+                    className="rounded-2xl bg-cyan-400 px-6 py-3 text-sm font-semibold text-black disabled:opacity-50"
+                  >
+                    {imageLoading
+                      ? isZh
+                        ? "出图中..."
+                        : "Generating images..."
+                      : isZh
+                      ? "生成镜头图片"
+                      : "Generate Shot Images"}
+                  </button>
+                </div>
+              </div>
+
+              {imageInfo && (
+                <div className="mb-5 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-zinc-300">
+                  {imageInfo}
+                </div>
+              )}
+
+              {shotImages.length === 0 ? (
+                <div className="rounded-[24px] border border-white/8 bg-black/25 p-5 text-zinc-400">
+                  {isZh
+                    ? "还没有生成镜头图片。系统会优先使用上面生成好的 Prompt，没有的话会自动先生成 Prompt 再出图。"
+                    : "No shot images yet. The system will use the prompts above, or auto-generate prompts first if needed."}
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {shotImages.map((item) => (
+                    <div
+                      key={`${item.shot}-${item.title}`}
+                      className="rounded-[24px] border border-white/8 bg-black/25 p-5"
+                    >
+                      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                        <div>
+                          <div className="inline-flex rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-xs text-cyan-300">
+                            {isZh ? `镜头 ${item.shot}` : `Shot ${item.shot}`}
+                          </div>
+                          <div className="mt-3 text-xl font-semibold text-white">{item.title}</div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => copyPromptText(item.promptUsed)}
+                            className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-xs text-zinc-200"
+                          >
+                            {isZh ? "复制所用 Prompt" : "Copy Used Prompt"}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">
+                        <div className="overflow-hidden rounded-[20px] border border-white/8 bg-zinc-950">
+                          <img
+                            src={item.imageUrl}
+                            alt={item.title}
+                            className="h-full w-full object-cover"
+                          />
+                        </div>
+
+                        <div className="rounded-[20px] border border-white/8 bg-zinc-950 p-4">
+                          <div className="text-sm font-medium text-cyan-300">
+                            {isZh ? "本次出图使用的英文 Prompt" : "Prompt used for generation"}
+                          </div>
+                          <div className="mt-3 whitespace-pre-wrap text-sm leading-7 text-zinc-200">
+                            {item.promptUsed}
+                          </div>
+
+                          {item.revisedPrompt ? (
+                            <>
+                              <div className="mt-5 text-sm font-medium text-cyan-300">
+                                {isZh ? "模型修订后的 Prompt" : "Revised Prompt"}
+                              </div>
+                              <div className="mt-3 whitespace-pre-wrap text-sm leading-7 text-zinc-300">
+                                {item.revisedPrompt}
+                              </div>
+                            </>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+
+          <section className="mx-auto max-w-7xl px-6 py-12">
             <div className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-7">
               <div className="mb-5 flex items-center justify-between gap-3">
                 <div>
@@ -1065,8 +1265,8 @@ export default function ResultPage() {
 
               <p className="relative mx-auto mt-4 max-w-3xl text-base leading-8 text-zinc-200">
                 {isZh
-                  ? "你现在已经能把剧本解析成结构化结果，并进一步生成出图 Prompt。下一步就可以继续接入图片生成。"
-                  : "You can now turn scripts into structured results and then into image-ready prompts. The next step is connecting image generation."}
+                  ? "你现在已经能把剧本解析成结构化结果、生成出图 Prompt，并直接得到镜头图片。下一步就可以继续接视频生成。"
+                  : "You can now turn scripts into structured results, generate image prompts, and directly create shot images. The next step is video generation."}
               </p>
 
               <div className="relative mt-8 flex flex-wrap items-center justify-center gap-4">
