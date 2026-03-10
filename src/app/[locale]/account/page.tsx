@@ -25,13 +25,7 @@ export default function AccountPage() {
   const [email, setEmail] = useState("");
   const [profile, setProfile] = useState<ProfileRow | null>(null);
   const [loading, setLoading] = useState(true);
-
-  const adminEmails = (process.env.NEXT_PUBLIC_ADMIN_EMAILS || "")
-    .split(",")
-    .map((item) => item.trim().toLowerCase())
-    .filter(Boolean);
-
-  const isAdmin = email ? adminEmails.includes(email.toLowerCase()) : false;
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     async function loadUserAndProfile() {
@@ -46,14 +40,14 @@ export default function AccountPage() {
 
       setEmail(user.email || "");
 
-      const { data, error } = await supabase
+      const { data: profileData, error: profileError } = await supabase
         .from("profiles")
         .select("*")
         .eq("id", user.id)
         .single();
 
-      if (!error && data) {
-        setProfile(data as ProfileRow);
+      if (!profileError && profileData) {
+        setProfile(profileData as ProfileRow);
       } else {
         setProfile({
           id: user.id,
@@ -66,6 +60,13 @@ export default function AccountPage() {
         });
       }
 
+      const { data: adminRow } = await supabase
+        .from("admins")
+        .select("id")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      setIsAdmin(!!adminRow);
       setLoading(false);
     }
 
