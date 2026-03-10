@@ -97,6 +97,9 @@ export default function AccountPage() {
     if (profile?.status === "active") {
       return isZh ? "已生效" : "Active";
     }
+    if (profile?.status === "banned") {
+      return isZh ? "已封禁" : "Banned";
+    }
     return profile?.status || (isZh ? "未知" : "Unknown");
   }, [profile, isZh]);
 
@@ -174,12 +177,22 @@ export default function AccountPage() {
 
               <div className="rounded-2xl bg-zinc-950 p-5">
                 <div className="text-sm text-zinc-400">{isZh ? "状态" : "Status"}</div>
-                <div className="mt-2 font-medium text-emerald-400">{statusLabel}</div>
+                <div
+                  className={`mt-2 font-medium ${
+                    profile?.status === "banned" ? "text-red-400" : "text-emerald-400"
+                  }`}
+                >
+                  {statusLabel}
+                </div>
               </div>
             </div>
 
             <div className="mt-6 rounded-2xl bg-zinc-950 p-5 text-sm text-zinc-400">
-              {isZh
+              {profile?.status === "banned"
+                ? isZh
+                  ? "当前账号已被限制使用，无法继续生成内容。如有疑问请联系管理员。"
+                  : "This account has been restricted and cannot continue generating content. Please contact support."
+                : isZh
                 ? "说明：每次点击首页“开始生成”都会自动检查并扣减额度。Studio 套餐为无限额度。"
                 : "Note: Each click on 'Start Generating' will automatically check and deduct usage quota. Studio plan has unlimited quota."}
             </div>

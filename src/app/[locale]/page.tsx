@@ -137,6 +137,16 @@ export default function LocalizedHome() {
         }
       }
 
+      if (currentProfile?.status === "banned") {
+        setMessage(
+          locale === "zh"
+            ? "当前账号已被限制使用，无法继续生成，请联系管理员。"
+            : "This account has been restricted and cannot generate content. Please contact support."
+        );
+        setLoading(false);
+        return;
+      }
+
       const currentPlan = currentProfile?.plan || "free";
       const currentQuota =
         currentPlan === "studio" ? 999999 : currentProfile?.monthly_quota ?? 5;
@@ -161,7 +171,7 @@ export default function LocalizedHome() {
           plan: currentPlan,
           monthly_quota: currentPlan === "studio" ? 999999 : currentQuota,
           used_count: nextUsedCount,
-          status: "active",
+          status: currentProfile?.status || "active",
           updated_at: new Date().toISOString(),
         },
         {
@@ -503,6 +513,11 @@ export default function LocalizedHome() {
                 <div className="rounded-full border border-white/10 bg-zinc-900 px-4 py-2 text-sm text-zinc-300">
                   {locale === "zh" ? `本月额度：${quotaText}` : `Quota: ${quotaText}`}
                 </div>
+                {profile?.status === "banned" && (
+                  <div className="rounded-full border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-300">
+                    {locale === "zh" ? "账号已被限制" : "Account Restricted"}
+                  </div>
+                )}
               </div>
             )}
 
@@ -568,10 +583,14 @@ export default function LocalizedHome() {
 
             <button
               onClick={handleUpload}
-              disabled={loading}
+              disabled={loading || profile?.status === "banned"}
               className="mt-5 h-12 w-full rounded-xl bg-emerald-400 px-6 text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-60"
             >
-              {loading
+              {profile?.status === "banned"
+                ? locale === "zh"
+                  ? "账号已被限制"
+                  : "Account Restricted"
+                : loading
                 ? locale === "zh"
                   ? "处理中..."
                   : "Processing..."

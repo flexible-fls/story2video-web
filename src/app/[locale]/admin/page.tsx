@@ -132,7 +132,7 @@ export default function AdminPage() {
               plan: nextPlan,
               monthly_quota: nextPlan === "studio" ? 999999 : nextPlan === "pro" ? 50 : 5,
               used_count: 0,
-              status: "active",
+              status: item.status,
               updated_at: new Date().toISOString(),
             }
           : item
@@ -141,6 +141,47 @@ export default function AdminPage() {
 
     setActionMessage(
       isZh ? `已成功修改用户套餐为 ${formatPlan(nextPlan)}` : `Plan updated to ${formatPlan(nextPlan)}`
+    );
+    setUpdatingUserId("");
+  }
+
+  async function handleStatusUpdate(userId: string, nextStatus: "active" | "banned") {
+    setUpdatingUserId(userId);
+    setActionMessage("");
+
+    const { error } = await supabase.rpc("admin_set_user_status", {
+      target_user_id: userId,
+      target_status: nextStatus,
+    });
+
+    if (error) {
+      setActionMessage(
+        isZh ? `状态修改失败：${error.message}` : `Status update failed: ${error.message}`
+      );
+      setUpdatingUserId("");
+      return;
+    }
+
+    setProfiles((prev) =>
+      prev.map((item) =>
+        item.id === userId
+          ? {
+              ...item,
+              status: nextStatus,
+              updated_at: new Date().toISOString(),
+            }
+          : item
+      )
+    );
+
+    setActionMessage(
+      isZh
+        ? nextStatus === "banned"
+          ? "用户已封禁"
+          : "用户已恢复为正常状态"
+        : nextStatus === "banned"
+        ? "User has been banned"
+        : "User has been restored to active status"
     );
     setUpdatingUserId("");
   }
@@ -220,6 +261,19 @@ export default function AdminPage() {
       return new Date(value).toLocaleString();
     },
     []
+  );
+
+  const formatStatus = useMemo(
+    () => (status: string) => {
+      if (status === "banned") {
+        return isZh ? "已封禁" : "Banned";
+      }
+      if (status === "active") {
+        return isZh ? "已生效" : "Active";
+      }
+      return status;
+    },
+    [isZh]
   );
 
   const normalizedSearch = search.trim().toLowerCase();
@@ -304,8 +358,8 @@ export default function AdminPage() {
 
           <p className="mt-3 text-zinc-400">
             {isZh
-              ? "查看全站用户、订单、生成情况，并支持基础搜索、套餐筛选、手动修改用户套餐与手动补单。"
-              : "Review platform users, orders, and generations with search, filters, manual plan edits, and manual grants."}
+              ? "查看全站用户、订单、生成情况，并支持搜索、套餐筛选、手动改套餐、手动补单与封禁控制。"
+              : "Review platform users, orders, and generations with search, filters, plan edits, manual grants, and ban controls."}
           </p>
         </div>
 
@@ -529,8 +583,14 @@ export default function AdminPage() {
                               : "Unlimited"
                             : `${item.used_count} / ${item.monthly_quota}`}
                         </div>
-                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
-                          {item.status}
+                        <div
+                          className={`rounded-full border px-3 py-1 ${
+                            item.status === "banned"
+                              ? "border-red-500/30 text-red-300"
+                              : "border-white/10 text-zinc-300"
+                          }`}
+                        >
+                          {formatStatus(item.status)}
                         </div>
                         <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
                           {formatTime(item.updated_at)}
@@ -539,6 +599,12 @@ export default function AdminPage() {
                     </div>
 
                     <div className="mt-4 flex flex-wrap gap-2">
+                      <Link
+                        href={`/${locale}/admin/users/${item.id}`}
+                        className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-200"
+                      >
+                        {isZh ? "查看详情" : "View Details"}
+                      </Link>
                       <button
                         onClick={() => handlePlanUpdate(item.id, "free")}
                         disabled={updatingUserId === item.id}
@@ -560,6 +626,23 @@ export default function AdminPage() {
                       >
                         {isZh ? "设为 Studio" : "Set Studio"}
                       </button>
+                      {item.status === "banned" ? (
+                        <button
+                          onClick={() => handleStatusUpdate(item.id, "active")}
+                          disabled={updatingUserId === item.id}
+                          className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-sm text-emerald-300 disabled:opacity-50"
+                        >
+                          {isZh ? "解封用户" : "Unban User"}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleStatusUpdate(item.id, "banned")}
+                          disabled={updatingUserId === item.id}
+                          className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-300 disabled:opacity-50"
+                        >
+                          {isZh ? "封禁用户" : "Ban User"}
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))
@@ -745,4 +828,3 @@ export default function AdminPage() {
     </main>
   );
 }
-
