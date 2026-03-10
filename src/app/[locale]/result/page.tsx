@@ -45,6 +45,8 @@ type GenerationJobRow = {
 };
 
 function loadLegacyResult(): StructuredResultPayload | null {
+  if (typeof window === "undefined") return null;
+
   const script = localStorage.getItem("scriptText") || "";
   const title = localStorage.getItem("parsedTitle") || "";
   const aiTitle = localStorage.getItem("parsedAiTitle") || "";
@@ -76,6 +78,89 @@ function loadLegacyResult(): StructuredResultPayload | null {
   };
 }
 
+function downloadTextFile(filename: string, content: string, mimeType = "text/plain;charset=utf-8") {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function buildExportText(payload: StructuredResultPayload, isZh: boolean) {
+  const lines: string[] = [];
+
+  lines.push(isZh ? "【项目标题】" : "[Title]");
+  lines.push(payload.title || "-");
+  lines.push("");
+
+  lines.push(isZh ? "【AI 标题】" : "[AI Title]");
+  lines.push(payload.aiTitle || "-");
+  lines.push("");
+
+  lines.push(isZh ? "【项目类型】" : "[Project Type]");
+  lines.push(payload.projectType || "-");
+  lines.push("");
+
+  lines.push(isZh ? "【题材类型】" : "[Genre]");
+  lines.push(payload.genre || "-");
+  lines.push("");
+
+  lines.push(isZh ? "【规格】" : "[Spec]");
+  lines.push(payload.spec || "-");
+  lines.push("");
+
+  lines.push(isZh ? "【亮点】" : "[Highlight]");
+  lines.push(payload.highlight || "-");
+  lines.push("");
+
+  lines.push(isZh ? "【剧情摘要】" : "[Summary]");
+  lines.push(payload.summary || "-");
+  lines.push("");
+
+  lines.push(isZh ? "【爆点文案】" : "[Hook]");
+  lines.push(payload.hook || "-");
+  lines.push("");
+
+  lines.push(isZh ? "【封面文案】" : "[Cover Copy]");
+  if (payload.coverCopy.length > 0) {
+    payload.coverCopy.forEach((item, index) => {
+      lines.push(`${index + 1}. ${item}`);
+    });
+  } else {
+    lines.push("-");
+  }
+  lines.push("");
+
+  lines.push(isZh ? "【角色列表】" : "[Characters]");
+  if (payload.characters.length > 0) {
+    payload.characters.forEach((item, index) => {
+      lines.push(`${index + 1}. ${item}`);
+    });
+  } else {
+    lines.push("-");
+  }
+  lines.push("");
+
+  lines.push(isZh ? "【分镜脚本】" : "[Storyboard]");
+  if (payload.storyboard.length > 0) {
+    payload.storyboard.forEach((item) => {
+      lines.push(`${isZh ? "镜头" : "Shot"} ${item.shot}: ${item.title}`);
+      lines.push(item.desc);
+      lines.push("");
+    });
+  } else {
+    lines.push("-");
+    lines.push("");
+  }
+
+  lines.push(isZh ? "【原始剧本】" : "[Original Script]");
+  lines.push(payload.script || "-");
+
+  return lines.join("\n");
+}
+
 export default function ResultPage() {
   const pathname = usePathname();
   const router = useRouter();
@@ -88,6 +173,7 @@ export default function ResultPage() {
   const [job, setJob] = useState<GenerationJobRow | null>(null);
   const [payload, setPayload] = useState<StructuredResultPayload | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
+  const [copyMessage, setCopyMessage] = useState("");
 
   useEffect(() => {
     bootstrap();
@@ -145,6 +231,12 @@ export default function ResultPage() {
     setLoading(false);
   }
 
+  useEffect(() => {
+    if (!copyMessage) return;
+    const timer = setTimeout(() => setCopyMessage(""), 1800);
+    return () => clearTimeout(timer);
+  }, [copyMessage]);
+
   const stats = useMemo(() => {
     if (!payload) return [];
 
@@ -194,6 +286,32 @@ export default function ResultPage() {
     if (status === "failed") return "border-red-500/20 bg-red-500/10 text-red-300";
     if (status === "processing") return "border-blue-500/20 bg-blue-500/10 text-blue-300";
     return "border-white/10 bg-white/[0.03] text-zinc-300";
+  }
+
+  async function copyStructuredResult() {
+    if (!payload) return;
+    const text = buildExportText(payload, isZh);
+    await navigator.clipboard.writeText(text);
+    setCopyMessage(isZh ? "结构化结果已复制" : "Structured result copied");
+  }
+
+  async function copyScriptOnly() {
+    if (!payload?.script) return;
+    await navigator.clipboard.writeText(payload.script);
+    setCopyMessage(isZh ? "原始剧本已复制" : "Original script copied");
+  }
+
+  function exportJson() {
+    if (!payload) return;
+    const fileName = `${payload.title || "result"}.json`;
+    downloadTextFile(fileName, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
+  }
+
+  function exportTxt() {
+    if (!payload) return;
+    const fileName = `${payload.title || "result"}.txt`;
+    const text = buildExportText(payload, isZh);
+    downloadTextFile(fileName, text);
   }
 
   if (loading) {
@@ -260,18 +378,6 @@ export default function ResultPage() {
                 : "This page shows your structured output, including project info, story summary, characters, storyboard, and cover copy suggestions."}
             </p>
 
-            <div className="mt-8 flex flex-wrap gap-3">
-              <div className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-zinc-300">
-                {isZh ? "结构化输出" : "Structured Output"}
-              </div>
-              <div className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-zinc-300">
-                {isZh ? "角色与分镜" : "Characters & Storyboard"}
-              </div>
-              <div className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-zinc-300">
-                {isZh ? "任务结果" : "Job Result"}
-              </div>
-            </div>
-
             <div className="mt-10 grid gap-4 sm:grid-cols-4">
               {stats.map((item) => (
                 <div
@@ -298,6 +404,12 @@ export default function ResultPage() {
               {errorMessage && (
                 <div className="mt-4 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
                   {errorMessage}
+                </div>
+              )}
+
+              {copyMessage && (
+                <div className="mt-4 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-300">
+                  {copyMessage}
                 </div>
               )}
 
@@ -356,6 +468,44 @@ export default function ResultPage() {
                 </div>
               ) : null}
 
+              {payload ? (
+                <div className="mt-6 rounded-[24px] border border-white/8 bg-black/40 p-5">
+                  <div className="mb-4 text-sm text-zinc-400">
+                    {isZh ? "导出与复制" : "Export & Copy"}
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <button
+                      onClick={exportJson}
+                      className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm font-medium text-zinc-200 transition hover:bg-white/[0.07]"
+                    >
+                      {isZh ? "导出 JSON" : "Export JSON"}
+                    </button>
+
+                    <button
+                      onClick={exportTxt}
+                      className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm font-medium text-zinc-200 transition hover:bg-white/[0.07]"
+                    >
+                      {isZh ? "导出 TXT" : "Export TXT"}
+                    </button>
+
+                    <button
+                      onClick={copyStructuredResult}
+                      className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm font-medium text-emerald-300 transition hover:bg-emerald-400/15"
+                    >
+                      {isZh ? "复制结构化结果" : "Copy Structured Result"}
+                    </button>
+
+                    <button
+                      onClick={copyScriptOnly}
+                      className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm font-medium text-zinc-200 transition hover:bg-white/[0.07]"
+                    >
+                      {isZh ? "复制原始剧本" : "Copy Script"}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
               <div className="mt-6 grid gap-3 sm:grid-cols-2">
                 {job?.result_url ? (
                   <a
@@ -392,8 +542,7 @@ export default function ResultPage() {
               {isZh ? "当前没有可展示的结构化结果" : "No structured result available"}
             </div>
             <div className="mt-3 text-zinc-400">
-              {isZh ? "你可以返回任务中心，或者重新创建新的生成任务。"
- : "You can go back to the jobs center or start a new generation."}
+              {isZh ? "你可以返回任务中心，或者重新创建新的生成任务。" : "You can go back to the jobs center or start a new generation."}
             </div>
             <div className="mt-6 flex justify-center gap-4">
               <Link
@@ -479,8 +628,7 @@ export default function ResultPage() {
                 </div>
 
                 <div className="mt-5 text-sm text-zinc-400">
-                  {isZh ? "这部分适合首页传播、封面文案和短视频开头钩子。"
- : "This section is suitable for cover text, distribution hooks, and opening lines."}
+                  {isZh ? "这部分适合首页传播、封面文案和短视频开头钩子。" : "This section is suitable for cover text, distribution hooks, and opening lines."}
                 </div>
               </div>
             </div>
