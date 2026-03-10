@@ -6,6 +6,8 @@ import { usePathname, useRouter } from "next/navigation";
 import LanguageSwitch from "@/components/LanguageSwitch";
 import BackButton from "@/components/BackButton";
 import { supabase } from "@/lib/supabase";
+import mammoth from "mammoth";
+import * as pdfjsLib from "pdfjs-dist";
 
 type ProfileRow = {
   id: string;
@@ -78,10 +80,6 @@ function cacheLegacyResult(payload: StructuredResultPayload) {
   localStorage.setItem("parsedCharacters", JSON.stringify(payload.characters));
   localStorage.setItem("parsedStoryboard", JSON.stringify(payload.storyboard));
   localStorage.setItem("parsedCoverCopy", JSON.stringify(payload.coverCopy));
-}
-
-async function readTextFile(file: File) {
-  return await file.text();
 }
 
 function sleep(ms: number) {
@@ -186,6 +184,105 @@ function buildFallbackResult(script: string, isZh: boolean): StructuredResultPay
   };
 }
 
+function getScriptStats(text: string) {
+  const trimmed = text.trim();
+  const charCount = trimmed.length;
+  const lineCount = trimmed ? trimmed.split("\n").length : 0;
+  return { charCount, lineCount };
+}
+
+function getExampleScript(isZh: boolean) {
+  return isZh
+    ? `剧名：错爱归途
+
+林晚：你为什么现在才回来？
+顾沉：因为我终于查到了真相。
+林晚：真相？你让我等了三年，现在才来告诉我真相？
+旁白：一场误会，把两个人推向命运的交叉口。
+
+场景一：夜雨街头
+林晚站在路灯下，眼眶微红，顾沉撑伞走近。
+顾沉：我欠你一个解释。
+林晚：可我已经不需要了。
+
+场景二：旧日回忆
+旁白：三年前，他在最该解释的时候离开了她。
+顾沉：如果那天我不走，你也会被卷进去。
+林晚：可你从来没有问过，我愿不愿意和你一起面对。`
+    : `Title: Return of Misunderstanding
+
+Lin Wan: Why did you come back so late?
+Gu Chen: Because I finally found the truth.
+Narrator: A misunderstanding pushed them to the edge of fate.
+
+Scene 1: Rainy street at night
+Lin Wan stands under a street lamp, eyes red. Gu Chen walks toward her with an umbrella.
+Gu Chen: I owe you an explanation.
+Lin Wan: I don't need it anymore.
+
+Scene 2: Flashback
+Narrator: Three years ago, he left when she needed him most.
+Gu Chen: If I had stayed, you would have been dragged into it.
+Lin Wan: But you never asked whether I wanted to face it with you.`;
+}
+
+async function extractTextFromTxtOrMd(file: File) {
+  return await file.text();
+}
+
+async function extractTextFromDocx(file: File) {
+  const arrayBuffer = await file.arrayBuffer();
+  const result = await mammoth.extractRawText({ arrayBuffer });
+  return result.value || "";
+}
+
+async function extractTextFromPdf(file: File) {
+  const arrayBuffer = await file.arrayBuffer();
+
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.8.69/pdf.worker.min.mjs";
+
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  let fullText = "";
+
+  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum += 1) {
+    const page = await pdf.getPage(pageNum);
+    const content = await page.getTextContent();
+    const pageText = content.items
+      .map((item: any) => ("str" in item ? item.str : ""))
+      .join(" ");
+    fullText += pageText + "\n";
+  }
+
+  return fullText.trim();
+}
+
+async function extractScriptTextFromFile(file: File, isZh: boolean) {
+  const lowerName = file.name.toLowerCase();
+
+  if (
+    lowerName.endsWith(".txt") ||
+    lowerName.endsWith(".md") ||
+    lowerName.endsWith(".text")
+  ) {
+    return await extractTextFromTxtOrMd(file);
+  }
+
+  if (lowerName.endsWith(".docx")) {
+    return await extractTextFromDocx(file);
+  }
+
+  if (lowerName.endsWith(".pdf")) {
+    return await extractTextFromPdf(file);
+  }
+
+  throw new Error(
+    isZh
+      ? "当前支持的剧本格式为：txt、md、text、docx、pdf"
+      : "Supported script formats: txt, md, text, docx, pdf"
+  );
+}
+
 export default function GeneratePage() {
   const pathname = usePathname();
   const router = useRouter();
@@ -204,6 +301,7 @@ export default function GeneratePage() {
   const [progress, setProgress] = useState(0);
   const [currentStep, setCurrentStep] = useState(0);
   const [providerInfo, setProviderInfo] = useState("");
+  const [isDragging, setIsDragging] = useState(false);
 
   const steps = useMemo(
     () =>
@@ -219,6 +317,8 @@ export default function GeneratePage() {
           ],
     [isZh]
   );
+
+  const scriptStats = useMemo(() => getScriptStats(scriptText), [scriptText]);
 
   useEffect(() => {
     bootstrap();
@@ -254,24 +354,10 @@ export default function GeneratePage() {
     setErrorMessage("");
 
     try {
-      const lowerName = file.name.toLowerCase();
-
-      if (
-        !lowerName.endsWith(".txt") &&
-        !lowerName.endsWith(".md") &&
-        !lowerName.endsWith(".text")
-      ) {
-        throw new Error(
-          isZh
-            ? "当前版本先支持 txt / md / text 文件，请先用文本文件上传。"
-            : "This version currently supports txt / md / text files only."
-        );
-      }
-
-      const text = await readTextFile(file);
+      const text = await extractScriptTextFromFile(file, isZh);
 
       if (!text.trim()) {
-        throw new Error(isZh ? "上传文件内容为空" : "The uploaded file is empty");
+        throw new Error(isZh ? "上传文件内容为空，无法提取剧本" : "The uploaded file is empty");
       }
 
       setScriptText(text);
@@ -287,6 +373,7 @@ export default function GeneratePage() {
       );
     } finally {
       setReadingFile(false);
+      setIsDragging(false);
     }
   }
 
@@ -498,8 +585,8 @@ export default function GeneratePage() {
 
           <p className="mt-3 text-zinc-400">
             {isZh
-              ? "首页带过来的剧本会自动显示在这里。你可以继续编辑，或者重新上传 txt / md 文本文件。点击开始生成后，系统会调用 AI 生成结构化结果。"
-              : "The script from the homepage is automatically loaded here. You can continue editing or re-upload a text file. When you start generation, the system calls AI to create structured output."}
+              ? "现在支持 txt、md、text、docx、pdf 格式，也支持直接拖拽上传。上传后会自动提取内容并写入剧本框。"
+              : "Now supports txt, md, text, docx, and pdf files, with drag-and-drop upload. Extracted content is automatically inserted into the script area."}
           </p>
 
           <div className="mt-4 text-sm text-zinc-500">{quotaText}</div>
@@ -528,7 +615,7 @@ export default function GeneratePage() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".txt,.md,.text"
+                  accept=".txt,.md,.text,.docx,.pdf"
                   onChange={onFileChange}
                   className="hidden"
                 />
@@ -543,8 +630,21 @@ export default function GeneratePage() {
                       ? "读取中..."
                       : "Reading..."
                     : isZh
-                    ? "重新上传文件"
-                    : "Upload File"}
+                    ? "上传剧本文件"
+                    : "Upload Script"}
+                </button>
+
+                <button
+                  onClick={() => {
+                    const example = getExampleScript(isZh);
+                    setScriptText(example);
+                    setLoadedFileName(isZh ? "示例剧本" : "Example Script");
+                    saveDraftScript(example, isZh ? "示例剧本" : "Example Script");
+                  }}
+                  disabled={submitting}
+                  className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-200 disabled:opacity-50"
+                >
+                  {isZh ? "一键填充示例" : "Use Example"}
                 </button>
 
                 <button
@@ -563,11 +663,58 @@ export default function GeneratePage() {
               </div>
             </div>
 
-            {loadedFileName && (
-              <div className="mb-4 text-sm text-zinc-500">
-                {isZh ? "当前文件：" : "Current file: "} {loadedFileName}
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsDragging(true);
+              }}
+              onDragLeave={(e) => {
+                e.preventDefault();
+                setIsDragging(false);
+              }}
+              onDrop={async (e) => {
+                e.preventDefault();
+                const file = e.dataTransfer.files?.[0];
+                if (!file) {
+                  setIsDragging(false);
+                  return;
+                }
+                await handleFileSelect(file);
+              }}
+              className={`mb-4 rounded-2xl border border-dashed p-5 transition ${
+                isDragging
+                  ? "border-emerald-400/50 bg-emerald-400/10"
+                  : "border-white/10 bg-zinc-950"
+              }`}
+            >
+              <div className="text-sm text-zinc-300">
+                {isZh
+                  ? "把剧本文件拖到这里，或点击上方按钮上传"
+                  : "Drag your script file here, or click the upload button above"}
               </div>
-            )}
+              <div className="mt-2 text-xs text-zinc-500">
+                {isZh
+                  ? "支持：txt / md / text / docx / pdf"
+                  : "Supported: txt / md / text / docx / pdf"}
+              </div>
+            </div>
+
+            <div className="mb-4 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl bg-zinc-950 p-4">
+                <div className="text-xs text-zinc-500">{isZh ? "当前文件" : "Current File"}</div>
+                <div className="mt-2 truncate text-sm text-white">{loadedFileName || "-"}</div>
+              </div>
+
+              <div className="rounded-2xl bg-zinc-950 p-4">
+                <div className="text-xs text-zinc-500">{isZh ? "字数统计" : "Character Count"}</div>
+                <div className="mt-2 text-sm text-white">{scriptStats.charCount}</div>
+              </div>
+
+              <div className="rounded-2xl bg-zinc-950 p-4">
+                <div className="text-xs text-zinc-500">{isZh ? "行数统计" : "Line Count"}</div>
+                <div className="mt-2 text-sm text-white">{scriptStats.lineCount}</div>
+              </div>
+            </div>
 
             <textarea
               value={scriptText}
@@ -679,8 +826,8 @@ export default function GeneratePage() {
 
             <div className="mt-6 rounded-2xl bg-zinc-950 p-4 text-sm text-zinc-400">
               {isZh
-                ? "这一版已经支持多模型切换。当前默认建议用 DeepSeek 跑通流程，后续可通过环境变量切回 OpenAI。"
-                : "This version supports multi-provider switching. DeepSeek is recommended for now, and you can switch back to OpenAI via environment variables later."}
+                ? "上传流程已增强：支持更多剧本格式、拖拽上传、示例剧本填充与自动提取内容。"
+                : "Upload flow enhanced with more script formats, drag-and-drop, example script fill, and automatic text extraction."}
             </div>
           </div>
         </div>
