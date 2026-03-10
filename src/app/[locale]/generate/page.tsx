@@ -48,6 +48,16 @@ type StructuredResultPayload = {
   script: string;
 };
 
+type GenerationJobHistoryRow = {
+  id: string;
+  script_title: string | null;
+  source_script: string | null;
+  created_at: string;
+  status: string;
+};
+
+type SourceMode = "upload" | "paste" | "template" | "history";
+
 const DRAFT_SCRIPT_TEXT_KEY = "draft_script_text";
 const DRAFT_SCRIPT_NAME_KEY = "draft_script_name";
 
@@ -191,9 +201,12 @@ function getScriptStats(text: string) {
   return { charCount, lineCount };
 }
 
-function getExampleScript(isZh: boolean) {
-  return isZh
-    ? `剧名：错爱归途
+function getExampleScripts(isZh: boolean) {
+  if (isZh) {
+    return [
+      {
+        title: "错爱归途",
+        text: `剧名：错爱归途
 
 林晚：你为什么现在才回来？
 顾沉：因为我终于查到了真相。
@@ -208,8 +221,33 @@ function getExampleScript(isZh: boolean) {
 场景二：旧日回忆
 旁白：三年前，他在最该解释的时候离开了她。
 顾沉：如果那天我不走，你也会被卷进去。
-林晚：可你从来没有问过，我愿不愿意和你一起面对。`
-    : `Title: Return of Misunderstanding
+林晚：可你从来没有问过，我愿不愿意和你一起面对。`,
+      },
+      {
+        title: "豪门替身",
+        text: `剧名：豪门替身
+
+沈知意：你找我来，到底想做什么？
+陆承泽：做她的替身，留在我身边三个月。
+沈知意：你疯了？
+旁白：一纸协议，把她推进了豪门迷局。
+
+场景一：总裁办公室
+陆承泽将合同推到桌前，眼神冷淡。
+陆承泽：价钱你开。
+沈知意：我不卖自己。
+陆承泽：那你弟弟的手术费呢？
+
+场景二：豪门晚宴
+沈知意第一次以“未婚妻”的身份出现在众人面前，所有人都在打量她。`,
+      },
+    ];
+  }
+
+  return [
+    {
+      title: "Return of Misunderstanding",
+      text: `Title: Return of Misunderstanding
 
 Lin Wan: Why did you come back so late?
 Gu Chen: Because I finally found the truth.
@@ -223,7 +261,9 @@ Lin Wan: I don't need it anymore.
 Scene 2: Flashback
 Narrator: Three years ago, he left when she needed him most.
 Gu Chen: If I had stayed, you would have been dragged into it.
-Lin Wan: But you never asked whether I wanted to face it with you.`;
+Lin Wan: But you never asked whether I wanted to face it with you.`,
+    },
+  ];
 }
 
 async function extractTextFromTxtOrMd(file: File) {
@@ -238,7 +278,6 @@ async function extractTextFromDocx(file: File) {
 
 async function extractTextFromPdf(file: File) {
   const arrayBuffer = await file.arrayBuffer();
-
   pdfjsLib.GlobalWorkerOptions.workerSrc =
     "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.8.69/pdf.worker.min.mjs";
 
@@ -302,6 +341,9 @@ export default function GeneratePage() {
   const [currentStep, setCurrentStep] = useState(0);
   const [providerInfo, setProviderInfo] = useState("");
   const [isDragging, setIsDragging] = useState(false);
+  const [sourceMode, setSourceMode] = useState<SourceMode>("upload");
+  const [historyJobs, setHistoryJobs] = useState<GenerationJobHistoryRow[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   const steps = useMemo(
     () =>
@@ -319,6 +361,7 @@ export default function GeneratePage() {
   );
 
   const scriptStats = useMemo(() => getScriptStats(scriptText), [scriptText]);
+  const exampleScripts = useMemo(() => getExampleScripts(isZh), [isZh]);
 
   useEffect(() => {
     bootstrap();
@@ -334,19 +377,54 @@ export default function GeneratePage() {
       return;
     }
 
-    const { data } = await supabase
-      .from("profiles")
-      .select("id,email,plan,monthly_quota,used_count,status,role")
-      .eq("id", user.id)
-      .maybeSingle();
+    const [profileRes, historyRes] = await Promise.all([
+      supabase
+        .from("profiles")
+        .select("id,email,plan,monthly_quota,used_count,status,role")
+        .eq("id", user.id)
+        .maybeSingle(),
+      supabase
+        .from("generation_jobs")
+        .select("id,script_title,source_script,created_at,status")
+        .eq("user_id", user.id)
+        .not("source_script", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(8),
+    ]);
 
-    if (data) {
-      setProfile(data as ProfileRow);
+    if (profileRes.data) {
+      setProfile(profileRes.data as ProfileRow);
     }
+
+    setHistoryJobs((historyRes.data as GenerationJobHistoryRow[]) || []);
 
     const draft = loadDraftScript();
     if (draft.text) setScriptText(draft.text);
     if (draft.fileName) setLoadedFileName(draft.fileName);
+  }
+
+  async function refreshHistoryScripts() {
+    setLoadingHistory(true);
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setLoadingHistory(false);
+      return;
+    }
+
+    const { data } = await supabase
+      .from("generation_jobs")
+      .select("id,script_title,source_script,created_at,status")
+      .eq("user_id", user.id)
+      .not("source_script", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(8);
+
+    setHistoryJobs((data as GenerationJobHistoryRow[]) || []);
+    setLoadingHistory(false);
   }
 
   async function handleFileSelect(file: File) {
@@ -363,6 +441,7 @@ export default function GeneratePage() {
       setScriptText(text);
       setLoadedFileName(file.name);
       saveDraftScript(text, file.name);
+      setSourceMode("upload");
     } catch (error) {
       setErrorMessage(
         error instanceof Error
@@ -585,8 +664,8 @@ export default function GeneratePage() {
 
           <p className="mt-3 text-zinc-400">
             {isZh
-              ? "现在支持 txt、md、text、docx、pdf 格式，也支持直接拖拽上传。上传后会自动提取内容并写入剧本框。"
-              : "Now supports txt, md, text, docx, and pdf files, with drag-and-drop upload. Extracted content is automatically inserted into the script area."}
+              ? "现在支持文件上传、直接粘贴、模板导入和历史剧本复用，让剧本进入生成流程更顺手。"
+              : "Now supports file upload, direct paste, template import, and history reuse for a smoother script-to-generation workflow."}
           </p>
 
           <div className="mt-4 text-sm text-zinc-500">{quotaText}</div>
@@ -606,103 +685,232 @@ export default function GeneratePage() {
 
         <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
           <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <div className="text-xl font-semibold">
-                {isZh ? "剧本输入" : "Script Input"}
-              </div>
+            <div className="mb-5 flex flex-wrap gap-2">
+              <button
+                onClick={() => setSourceMode("upload")}
+                className={`rounded-xl px-4 py-2 text-sm ${
+                  sourceMode === "upload"
+                    ? "bg-emerald-400 text-black"
+                    : "border border-white/10 bg-zinc-950 text-zinc-300"
+                }`}
+              >
+                {isZh ? "上传文件" : "Upload File"}
+              </button>
 
-              <div className="flex flex-wrap gap-2">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".txt,.md,.text,.docx,.pdf"
-                  onChange={onFileChange}
-                  className="hidden"
-                />
+              <button
+                onClick={() => setSourceMode("paste")}
+                className={`rounded-xl px-4 py-2 text-sm ${
+                  sourceMode === "paste"
+                    ? "bg-emerald-400 text-black"
+                    : "border border-white/10 bg-zinc-950 text-zinc-300"
+                }`}
+              >
+                {isZh ? "直接粘贴" : "Paste Script"}
+              </button>
 
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={readingFile || submitting || profile?.status === "banned"}
-                  className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-200 disabled:opacity-50"
-                >
-                  {readingFile
-                    ? isZh
-                      ? "读取中..."
-                      : "Reading..."
-                    : isZh
-                    ? "上传剧本文件"
-                    : "Upload Script"}
-                </button>
+              <button
+                onClick={() => setSourceMode("template")}
+                className={`rounded-xl px-4 py-2 text-sm ${
+                  sourceMode === "template"
+                    ? "bg-emerald-400 text-black"
+                    : "border border-white/10 bg-zinc-950 text-zinc-300"
+                }`}
+              >
+                {isZh ? "模板导入" : "Templates"}
+              </button>
 
-                <button
-                  onClick={() => {
-                    const example = getExampleScript(isZh);
-                    setScriptText(example);
-                    setLoadedFileName(isZh ? "示例剧本" : "Example Script");
-                    saveDraftScript(example, isZh ? "示例剧本" : "Example Script");
-                  }}
-                  disabled={submitting}
-                  className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-200 disabled:opacity-50"
-                >
-                  {isZh ? "一键填充示例" : "Use Example"}
-                </button>
-
-                <button
-                  onClick={() => {
-                    setScriptText("");
-                    setLoadedFileName("");
-                    setErrorMessage("");
-                    localStorage.removeItem(DRAFT_SCRIPT_TEXT_KEY);
-                    localStorage.removeItem(DRAFT_SCRIPT_NAME_KEY);
-                  }}
-                  disabled={submitting}
-                  className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-200 disabled:opacity-50"
-                >
-                  {isZh ? "清空剧本" : "Clear Script"}
-                </button>
-              </div>
+              <button
+                onClick={async () => {
+                  setSourceMode("history");
+                  await refreshHistoryScripts();
+                }}
+                className={`rounded-xl px-4 py-2 text-sm ${
+                  sourceMode === "history"
+                    ? "bg-emerald-400 text-black"
+                    : "border border-white/10 bg-zinc-950 text-zinc-300"
+                }`}
+              >
+                {isZh ? "历史剧本" : "History"}
+              </button>
             </div>
 
-            <div
-              onDragOver={(e) => {
-                e.preventDefault();
-                setIsDragging(true);
-              }}
-              onDragLeave={(e) => {
-                e.preventDefault();
-                setIsDragging(false);
-              }}
-              onDrop={async (e) => {
-                e.preventDefault();
-                const file = e.dataTransfer.files?.[0];
-                if (!file) {
-                  setIsDragging(false);
-                  return;
-                }
-                await handleFileSelect(file);
-              }}
-              className={`mb-4 rounded-2xl border border-dashed p-5 transition ${
-                isDragging
-                  ? "border-emerald-400/50 bg-emerald-400/10"
-                  : "border-white/10 bg-zinc-950"
-              }`}
-            >
-              <div className="text-sm text-zinc-300">
-                {isZh
-                  ? "把剧本文件拖到这里，或点击上方按钮上传"
-                  : "Drag your script file here, or click the upload button above"}
+            {sourceMode === "upload" && (
+              <div className="mb-5">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <div className="text-xl font-semibold">
+                    {isZh ? "上传剧本文件" : "Upload Script File"}
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".txt,.md,.text,.docx,.pdf"
+                      onChange={onFileChange}
+                      className="hidden"
+                    />
+
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={readingFile || submitting || profile?.status === "banned"}
+                      className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-200 disabled:opacity-50"
+                    >
+                      {readingFile
+                        ? isZh
+                          ? "读取中..."
+                          : "Reading..."
+                        : isZh
+                        ? "选择剧本文件"
+                        : "Choose Script File"}
+                    </button>
+                  </div>
+                </div>
+
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDragging(true);
+                  }}
+                  onDragLeave={(e) => {
+                    e.preventDefault();
+                    setIsDragging(false);
+                  }}
+                  onDrop={async (e) => {
+                    e.preventDefault();
+                    const file = e.dataTransfer.files?.[0];
+                    if (!file) {
+                      setIsDragging(false);
+                      return;
+                    }
+                    await handleFileSelect(file);
+                  }}
+                  className={`rounded-2xl border border-dashed p-5 transition ${
+                    isDragging
+                      ? "border-emerald-400/50 bg-emerald-400/10"
+                      : "border-white/10 bg-zinc-950"
+                  }`}
+                >
+                  <div className="text-sm text-zinc-300">
+                    {isZh
+                      ? "把剧本文件拖到这里，或点击上方按钮上传"
+                      : "Drag your script file here, or click the upload button above"}
+                  </div>
+                  <div className="mt-2 text-xs text-zinc-500">
+                    {isZh
+                      ? "支持：txt / md / text / docx / pdf"
+                      : "Supported: txt / md / text / docx / pdf"}
+                  </div>
+                </div>
               </div>
-              <div className="mt-2 text-xs text-zinc-500">
-                {isZh
-                  ? "支持：txt / md / text / docx / pdf"
-                  : "Supported: txt / md / text / docx / pdf"}
+            )}
+
+            {sourceMode === "template" && (
+              <div className="mb-5">
+                <div className="mb-4 text-xl font-semibold">
+                  {isZh ? "选择剧本模板" : "Choose a Script Template"}
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  {exampleScripts.map((item) => (
+                    <button
+                      key={item.title}
+                      onClick={() => {
+                        setScriptText(item.text);
+                        setLoadedFileName(item.title);
+                        saveDraftScript(item.text, item.title);
+                      }}
+                      className="rounded-2xl border border-white/10 bg-zinc-950 p-5 text-left transition hover:border-emerald-400/30"
+                    >
+                      <div className="text-lg font-semibold text-white">{item.title}</div>
+                      <div className="mt-2 line-clamp-4 text-sm text-zinc-400">
+                        {item.text}
+                      </div>
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
+
+            {sourceMode === "history" && (
+              <div className="mb-5">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div className="text-xl font-semibold">
+                    {isZh ? "从历史剧本导入" : "Import from History"}
+                  </div>
+
+                  <button
+                    onClick={refreshHistoryScripts}
+                    disabled={loadingHistory}
+                    className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-200 disabled:opacity-50"
+                  >
+                    {loadingHistory
+                      ? isZh
+                        ? "刷新中..."
+                        : "Refreshing..."
+                      : isZh
+                      ? "刷新历史"
+                      : "Refresh"}
+                  </button>
+                </div>
+
+                {historyJobs.length === 0 ? (
+                  <div className="rounded-2xl border border-white/10 bg-zinc-950 p-5 text-sm text-zinc-400">
+                    {isZh ? "暂时没有可导入的历史剧本" : "No reusable script history yet"}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {historyJobs.map((item) => (
+                      <button
+                        key={item.id}
+                        onClick={() => {
+                          const value = item.source_script || "";
+                          setScriptText(value);
+                          setLoadedFileName(item.script_title || item.id);
+                          saveDraftScript(value, item.script_title || item.id);
+                        }}
+                        className="w-full rounded-2xl border border-white/10 bg-zinc-950 p-4 text-left transition hover:border-emerald-400/30"
+                      >
+                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                          <div>
+                            <div className="font-semibold text-white">
+                              {item.script_title || (isZh ? "未命名剧本" : "Untitled Script")}
+                            </div>
+                            <div className="mt-1 text-xs text-zinc-500">
+                              {new Date(item.created_at).toLocaleString()}
+                            </div>
+                          </div>
+
+                          <div className="rounded-full border border-white/10 px-3 py-1 text-xs text-zinc-300">
+                            {item.status}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="mb-4 grid gap-3 sm:grid-cols-3">
               <div className="rounded-2xl bg-zinc-950 p-4">
-                <div className="text-xs text-zinc-500">{isZh ? "当前文件" : "Current File"}</div>
-                <div className="mt-2 truncate text-sm text-white">{loadedFileName || "-"}</div>
+                <div className="text-xs text-zinc-500">{isZh ? "当前来源" : "Current Source"}</div>
+                <div className="mt-2 text-sm text-white">
+                  {sourceMode === "upload"
+                    ? isZh
+                      ? "文件上传"
+                      : "File Upload"
+                    : sourceMode === "paste"
+                    ? isZh
+                      ? "直接粘贴"
+                      : "Direct Paste"
+                    : sourceMode === "template"
+                    ? isZh
+                      ? "模板导入"
+                      : "Template Import"
+                    : isZh
+                    ? "历史剧本"
+                    : "History Import"}
+                </div>
               </div>
 
               <div className="rounded-2xl bg-zinc-950 p-4">
@@ -714,6 +922,28 @@ export default function GeneratePage() {
                 <div className="text-xs text-zinc-500">{isZh ? "行数统计" : "Line Count"}</div>
                 <div className="mt-2 text-sm text-white">{scriptStats.lineCount}</div>
               </div>
+            </div>
+
+            {loadedFileName && (
+              <div className="mb-4 rounded-2xl bg-zinc-950 p-4 text-sm text-zinc-300">
+                {isZh ? "当前剧本：" : "Current script: "} {loadedFileName}
+              </div>
+            )}
+
+            <div className="mb-3 flex flex-wrap gap-2">
+              <button
+                onClick={() => {
+                  setScriptText("");
+                  setLoadedFileName("");
+                  setErrorMessage("");
+                  localStorage.removeItem(DRAFT_SCRIPT_TEXT_KEY);
+                  localStorage.removeItem(DRAFT_SCRIPT_NAME_KEY);
+                }}
+                disabled={submitting}
+                className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-200 disabled:opacity-50"
+              >
+                {isZh ? "清空剧本" : "Clear Script"}
+              </button>
             </div>
 
             <textarea
@@ -826,8 +1056,8 @@ export default function GeneratePage() {
 
             <div className="mt-6 rounded-2xl bg-zinc-950 p-4 text-sm text-zinc-400">
               {isZh
-                ? "上传流程已增强：支持更多剧本格式、拖拽上传、示例剧本填充与自动提取内容。"
-                : "Upload flow enhanced with more script formats, drag-and-drop, example script fill, and automatic text extraction."}
+                ? "现在你可以从多个来源导入剧本，不用每次都重复找文件或重新粘贴。"
+                : "You can now import scripts from multiple sources without repeatedly searching for files or repasting text."}
             </div>
           </div>
         </div>
