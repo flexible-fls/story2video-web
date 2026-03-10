@@ -43,7 +43,7 @@ function getExampleScript(isZh: boolean) {
 林晚：你为什么现在才回来？
 顾沉：因为我终于查到了真相。
 林晚：真相？你让我等了三年，现在才来告诉我真相？
-旁白：一场误会，把两个人推向命运的交叉口。
+旁白：一场误会，把两个人推向了命运的交叉口。
 
 场景一：夜雨街头
 林晚站在路灯下，眼眶微红，顾沉撑伞走近。
@@ -613,6 +613,104 @@ export default function HomePage() {
                 ? "每次生成都会记录任务状态、结构化结果和历史记录，更适合持续改稿和批量生产。"
                 : "Each generation is tracked with status, structured output, and history, making it suitable for iterative editing and scaled production."}
             </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-7xl px-6 py-14">
+        <div className="mb-6">
+          <div className="inline-flex rounded-full border border-emerald-400/20 bg-emerald-400/10 px-4 py-1 text-xs text-emerald-300">
+            {isZh ? "套餐方案" : "Pricing"}
+          </div>
+          <h2 className="mt-4 text-4xl font-bold text-white md:text-5xl">
+            {isZh ? "选择适合你的内容生产方案" : "Choose the plan that fits your workflow"}
+          </h2>
+          <p className="mt-4 max-w-3xl text-base leading-8 text-zinc-300">
+            {isZh
+              ? "无论你是想先体验 AI 解析，还是已经进入持续内容生产阶段，都可以根据额度和使用频率选择合适的方案。"
+              : "Whether you are just trying AI analysis or already running continuous production, choose the plan that matches your usage and quota needs."}
+          </p>
+        </div>
+
+        <div className="grid gap-6 xl:grid-cols-3">
+          <div className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-7 shadow-[0_20px_60px_rgba(0,0,0,0.22)]">
+            <div className="text-sm font-medium text-zinc-400">Free</div>
+            <div className="mt-3 text-4xl font-bold text-white">
+              {isZh ? "免费体验" : "Free Trial"}
+            </div>
+            <div className="mt-4 text-2xl font-semibold text-white">¥0</div>
+            <div className="mt-2 text-sm text-zinc-400">
+              {isZh ? "适合初次体验与测试流程" : "Best for first-time testing"}
+            </div>
+
+            <div className="mt-6 space-y-3 text-sm text-zinc-300">
+              <div>• {isZh ? "每月 5 次基础生成额度" : "5 generations per month"}</div>
+              <div>• {isZh ? "支持剧本上传与 AI 解析" : "Script upload and AI analysis"}</div>
+              <div>• {isZh ? "查看结果页与任务记录" : "Result page and job history"}</div>
+            </div>
+
+            <Link
+              href={`/${locale}/billing`}
+              className="mt-8 block rounded-2xl border border-white/10 bg-white/[0.03] px-6 py-3 text-center text-sm text-zinc-200 transition hover:bg-white/[0.07]"
+            >
+              {isZh ? "查看方案" : "View Plan"}
+            </Link>
+          </div>
+
+          <div className="relative rounded-[32px] border border-emerald-400/20 bg-gradient-to-b from-emerald-400/10 to-zinc-950 p-7 shadow-[0_25px_80px_rgba(16,185,129,0.10)]">
+            <div className="absolute right-5 top-5 rounded-full border border-emerald-400/20 bg-emerald-400/15 px-3 py-1 text-xs text-emerald-300">
+              {isZh ? "推荐" : "Popular"}
+            </div>
+
+            <div className="text-sm font-medium text-emerald-300">Pro</div>
+            <div className="mt-3 text-4xl font-bold text-white">
+              {isZh ? "进阶创作" : "Pro Creator"}
+            </div>
+            <div className="mt-4 text-2xl font-semibold text-white">
+              {isZh ? "按你的后台价格显示" : "Use your billing price"}
+            </div>
+            <div className="mt-2 text-sm text-zinc-300">
+              {isZh ? "适合稳定使用、持续改稿和批量测试" : "For regular creators and stable production"}
+            </div>
+
+            <div className="mt-6 space-y-3 text-sm text-zinc-200">
+              <div>• {isZh ? "每月 50 次生成额度" : "50 generations per month"}</div>
+              <div>• {isZh ? "更适合连续剧本测试与迭代" : "Better for continuous script iteration"}</div>
+              <div>• {isZh ? "适合短剧 / 漫剧生产前期" : "Suitable for early drama/comic production"}</div>
+            </div>
+
+            <Link
+              href={`/${locale}/billing`}
+              className="mt-8 block rounded-2xl bg-emerald-400 px-6 py-3 text-center text-sm font-semibold text-black transition hover:bg-emerald-300"
+            >
+              {isZh ? "升级到 Pro" : "Upgrade to Pro"}
+            </Link>
+          </div>
+
+          <div className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-7 shadow-[0_20px_60px_rgba(0,0,0,0.22)]">
+            <div className="text-sm font-medium text-zinc-400">Studio</div>
+            <div className="mt-3 text-4xl font-bold text-white">
+              {isZh ? "团队与高频生产" : "Studio Workflow"}
+            </div>
+            <div className="mt-4 text-2xl font-semibold text-white">
+              {isZh ? "按你的后台价格显示" : "Use your billing price"}
+            </div>
+            <div className="mt-2 text-sm text-zinc-400">
+              {isZh ? "适合高频创作与长期项目" : "For high-frequency and long-term projects"}
+            </div>
+
+            <div className="mt-6 space-y-3 text-sm text-zinc-300">
+              <div>• {isZh ? "无限额度体验" : "Unlimited usage experience"}</div>
+              <div>• {isZh ? "更适合长期内容生产" : "Best for ongoing production"}</div>
+              <div>• {isZh ? "适合工作室与内容团队" : "Built for teams and studios"}</div>
+            </div>
+
+            <Link
+              href={`/${locale}/billing`}
+              className="mt-8 block rounded-2xl border border-white/10 bg-white/[0.03] px-6 py-3 text-center text-sm text-zinc-200 transition hover:bg-white/[0.07]"
+            >
+              {isZh ? "查看 Studio" : "View Studio"}
+            </Link>
           </div>
         </div>
       </section>
