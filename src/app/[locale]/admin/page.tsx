@@ -150,7 +150,9 @@ export default function AdminPage() {
     );
 
     setActionMessage(
-      isZh ? `已成功修改用户套餐为 ${formatPlan(nextPlan)}` : `Plan updated to ${formatPlan(nextPlan)}`
+      isZh
+        ? `已成功修改用户套餐为 ${formatPlan(nextPlan)}`
+        : `Plan updated to ${formatPlan(nextPlan)}`
     );
     setUpdatingUserId("");
   }
@@ -424,9 +426,44 @@ export default function AdminPage() {
     return Array.from(monthMap.values());
   }, [profiles, orders, generations]);
 
-  const revenueMax = Math.max(...monthlyStats.map((item) => item.revenue), 1);
-  const usersMax = Math.max(...monthlyStats.map((item) => item.users), 1);
-  const generationsMax = Math.max(...monthlyStats.map((item) => item.generations), 1);
+  const last30Days = useMemo(() => {
+    const now = Date.now();
+    const days30 = 30 * 24 * 60 * 60 * 1000;
+
+    const activeUserSet = new Set<string>();
+    generations.forEach((item) => {
+      const time = new Date(item.created_at).getTime();
+      if (now - time <= days30) {
+        activeUserSet.add(item.user_id);
+      }
+    });
+
+    const recentPaidOrders = orders.filter((item) => {
+      const time = new Date(item.created_at).getTime();
+      return now - time <= days30 && item.status === "paid";
+    });
+
+    return {
+      activeUsers: activeUserSet.size,
+      paidOrders: recentPaidOrders.length,
+    };
+  }, [generations, orders]);
+
+  const planDistribution = useMemo(() => {
+    const free = profiles.filter((item) => item.plan === "free").length;
+    const pro = profiles.filter((item) => item.plan === "pro").length;
+    const studio = profiles.filter((item) => item.plan === "studio").length;
+    const total = profiles.length || 1;
+
+    return {
+      free,
+      pro,
+      studio,
+      freePct: (free / total) * 100,
+      proPct: (pro / total) * 100,
+      studioPct: (studio / total) * 100,
+    };
+  }, [profiles]);
 
   const totalUsers = profiles.length;
   const totalGenerations = generations.length;
@@ -435,8 +472,15 @@ export default function AdminPage() {
     .filter((item) => item.status === "paid")
     .reduce((sum, item) => sum + (item.amount || 0), 0);
 
+  const paidConversionRate = totalUsers > 0 ? (paidUsers / totalUsers) * 100 : 0;
+  const arppu = paidUsers > 0 ? totalRevenue / paidUsers : 0;
+
   const recentGenerations = generations.slice(0, 8);
   const recentOrders = orders.slice(0, 8);
+
+  const revenueMax = Math.max(...monthlyStats.map((item) => item.revenue), 1);
+  const usersMax = Math.max(...monthlyStats.map((item) => item.users), 1);
+  const generationsMax = Math.max(...monthlyStats.map((item) => item.generations), 1);
 
   const formatPlan = useMemo(
     () => (plan: string) => {
@@ -453,6 +497,11 @@ export default function AdminPage() {
       return `$${(amount / 100).toFixed(2)}`;
     },
     [isZh]
+  );
+
+  const formatPercent = useMemo(
+    () => (value: number) => `${value.toFixed(1)}%`,
+    []
   );
 
   const formatTime = useMemo(
@@ -556,8 +605,8 @@ export default function AdminPage() {
 
           <p className="mt-3 text-zinc-400">
             {isZh
-              ? "查看全站用户、订单、生成情况，并支持搜索、筛选、改套餐、补单、封禁、数据清理、CSV 导出和趋势统计。"
-              : "Review platform users, orders, and generations with search, filters, plan edits, grants, bans, cleanup tools, CSV export, and trend analytics."}
+              ? "查看全站用户、订单、生成情况，并支持搜索、筛选、改套餐、补单、封禁、数据清理、CSV 导出和高级运营统计。"
+              : "Review platform users, orders, and generations with search, filters, plan edits, grants, bans, cleanup tools, CSV export, and advanced business metrics."}
           </p>
         </div>
 
@@ -685,6 +734,70 @@ export default function AdminPage() {
 
         {activeTab === "overview" && (
           <>
+            <div className="mt-8 grid gap-6 xl:grid-cols-5">
+              <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6">
+                <div className="text-sm text-zinc-400">
+                  {isZh ? "付费转化率" : "Paid Conversion"}
+                </div>
+                <div className="mt-3 text-3xl font-bold">
+                  {formatPercent(paidConversionRate)}
+                </div>
+                <div className="mt-2 text-xs text-zinc-500">
+                  {isZh ? "付费用户 / 总用户" : "Paid users / total users"}
+                </div>
+              </div>
+
+              <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6">
+                <div className="text-sm text-zinc-400">
+                  {isZh ? "最近30天活跃用户" : "Active Users (30d)"}
+                </div>
+                <div className="mt-3 text-3xl font-bold">{last30Days.activeUsers}</div>
+                <div className="mt-2 text-xs text-zinc-500">
+                  {isZh ? "按生成行为统计" : "Based on generation activity"}
+                </div>
+              </div>
+
+              <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6">
+                <div className="text-sm text-zinc-400">
+                  {isZh ? "最近30天付费订单" : "Paid Orders (30d)"}
+                </div>
+                <div className="mt-3 text-3xl font-bold">{last30Days.paidOrders}</div>
+                <div className="mt-2 text-xs text-zinc-500">
+                  {isZh ? "仅统计 paid" : "Paid status only"}
+                </div>
+              </div>
+
+              <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6">
+                <div className="text-sm text-zinc-400">
+                  {isZh ? "ARPPU" : "ARPPU"}
+                </div>
+                <div className="mt-3 text-3xl font-bold">{formatMoney(arppu)}</div>
+                <div className="mt-2 text-xs text-zinc-500">
+                  {isZh ? "每付费用户平均收入" : "Avg revenue per paid user"}
+                </div>
+              </div>
+
+              <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6">
+                <div className="text-sm text-zinc-400">
+                  {isZh ? "套餐分布" : "Plan Mix"}
+                </div>
+                <div className="mt-3 space-y-2 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span>Free</span>
+                    <span>{planDistribution.free}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Pro</span>
+                    <span>{planDistribution.pro}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Studio</span>
+                    <span>{planDistribution.studio}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div className="mt-8 grid gap-6 xl:grid-cols-3">
               <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6">
                 <div className="mb-4 text-xl font-semibold">
@@ -700,7 +813,12 @@ export default function AdminPage() {
                       <div className="h-3 rounded-full bg-zinc-950">
                         <div
                           className="h-3 rounded-full bg-emerald-400"
-                          style={{ width: `${Math.max((item.revenue / revenueMax) * 100, item.revenue > 0 ? 8 : 0)}%` }}
+                          style={{
+                            width: `${Math.max(
+                              (item.revenue / revenueMax) * 100,
+                              item.revenue > 0 ? 8 : 0
+                            )}%`,
+                          }}
                         />
                       </div>
                     </div>
@@ -722,7 +840,12 @@ export default function AdminPage() {
                       <div className="h-3 rounded-full bg-zinc-950">
                         <div
                           className="h-3 rounded-full bg-white"
-                          style={{ width: `${Math.max((item.users / usersMax) * 100, item.users > 0 ? 8 : 0)}%` }}
+                          style={{
+                            width: `${Math.max(
+                              (item.users / usersMax) * 100,
+                              item.users > 0 ? 8 : 0
+                            )}%`,
+                          }}
                         />
                       </div>
                     </div>
@@ -744,7 +867,12 @@ export default function AdminPage() {
                       <div className="h-3 rounded-full bg-zinc-950">
                         <div
                           className="h-3 rounded-full bg-zinc-400"
-                          style={{ width: `${Math.max((item.generations / generationsMax) * 100, item.generations > 0 ? 8 : 0)}%` }}
+                          style={{
+                            width: `${Math.max(
+                              (item.generations / generationsMax) * 100,
+                              item.generations > 0 ? 8 : 0
+                            )}%`,
+                          }}
                         />
                       </div>
                     </div>
@@ -753,8 +881,8 @@ export default function AdminPage() {
               </div>
             </div>
 
-            <div className="mt-8 grid gap-6 xl:grid-cols-2">
-              <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6">
+            <div className="mt-8 grid gap-6 xl:grid-cols-3">
+              <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6 xl:col-span-2">
                 <div className="mb-4 text-xl font-semibold">
                   {isZh ? "最近生成记录" : "Recent Generations"}
                 </div>
@@ -775,9 +903,15 @@ export default function AdminPage() {
                             <div className="mt-1 text-xs text-zinc-500">{item.email || "-"}</div>
                           </div>
                           <div className="flex flex-wrap gap-2 text-xs">
-                            <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{formatPlan(item.plan)}</div>
-                            <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{isZh ? "消耗" : "Cost"}: {item.quota_cost}</div>
-                            <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{formatTime(item.created_at)}</div>
+                            <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                              {formatPlan(item.plan)}
+                            </div>
+                            <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                              {isZh ? "消耗" : "Cost"}: {item.quota_cost}
+                            </div>
+                            <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                              {formatTime(item.created_at)}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -788,33 +922,92 @@ export default function AdminPage() {
 
               <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6">
                 <div className="mb-4 text-xl font-semibold">
-                  {isZh ? "最近订单记录" : "Recent Orders"}
+                  {isZh ? "套餐占比" : "Plan Distribution"}
                 </div>
 
-                {recentOrders.length === 0 ? (
-                  <div className="rounded-2xl bg-zinc-950 p-6 text-zinc-400">
-                    {isZh ? "暂无订单记录" : "No order records yet"}
+                <div className="space-y-5">
+                  <div>
+                    <div className="mb-2 flex items-center justify-between text-sm">
+                      <span>Free</span>
+                      <span>{planDistribution.free} · {formatPercent(planDistribution.freePct)}</span>
+                    </div>
+                    <div className="h-3 rounded-full bg-zinc-950">
+                      <div
+                        className="h-3 rounded-full bg-zinc-400"
+                        style={{ width: `${Math.max(planDistribution.freePct, planDistribution.free > 0 ? 8 : 0)}%` }}
+                      />
+                    </div>
                   </div>
-                ) : (
-                  <div className="space-y-4">
-                    {recentOrders.map((item) => (
-                      <div key={item.id} className="rounded-2xl bg-zinc-950 p-4">
-                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                          <div>
-                            <div className="font-medium">{formatPlan(item.plan)}</div>
-                            <div className="mt-1 text-xs text-zinc-500">{item.email || "-"}</div>
+
+                  <div>
+                    <div className="mb-2 flex items-center justify-between text-sm">
+                      <span>Pro</span>
+                      <span>{planDistribution.pro} · {formatPercent(planDistribution.proPct)}</span>
+                    </div>
+                    <div className="h-3 rounded-full bg-zinc-950">
+                      <div
+                        className="h-3 rounded-full bg-white"
+                        style={{ width: `${Math.max(planDistribution.proPct, planDistribution.pro > 0 ? 8 : 0)}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="mb-2 flex items-center justify-between text-sm">
+                      <span>Studio</span>
+                      <span>{planDistribution.studio} · {formatPercent(planDistribution.studioPct)}</span>
+                    </div>
+                    <div className="h-3 rounded-full bg-zinc-950">
+                      <div
+                        className="h-3 rounded-full bg-emerald-400"
+                        style={{ width: `${Math.max(planDistribution.studioPct, planDistribution.studio > 0 ? 8 : 0)}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-6 rounded-2xl bg-zinc-950 p-4 text-sm text-zinc-400">
+                  {isZh
+                    ? "可用来快速判断当前产品主要收入来自哪个套餐层级。"
+                    : "Useful for quickly seeing which plan tier is driving your business."}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-8 rounded-3xl border border-white/10 bg-zinc-900 p-6">
+              <div className="mb-4 text-xl font-semibold">
+                {isZh ? "最近订单记录" : "Recent Orders"}
+              </div>
+
+              {recentOrders.length === 0 ? (
+                <div className="rounded-2xl bg-zinc-950 p-6 text-zinc-400">
+                  {isZh ? "暂无订单记录" : "No order records yet"}
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {recentOrders.map((item) => (
+                    <div key={item.id} className="rounded-2xl bg-zinc-950 p-4">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                        <div>
+                          <div className="font-medium">{formatPlan(item.plan)}</div>
+                          <div className="mt-1 text-xs text-zinc-500">{item.email || "-"}</div>
+                        </div>
+                        <div className="flex flex-wrap gap-2 text-xs">
+                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                            {formatMoney(item.amount)}
                           </div>
-                          <div className="flex flex-wrap gap-2 text-xs">
-                            <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{formatMoney(item.amount)}</div>
-                            <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{item.status}</div>
-                            <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{formatTime(item.created_at)}</div>
+                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                            {item.status}
+                          </div>
+                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                            {formatTime(item.created_at)}
                           </div>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </>
         )}
@@ -824,7 +1017,9 @@ export default function AdminPage() {
             <div className="mb-4 text-xl font-semibold">{isZh ? "用户列表" : "User List"}</div>
             <div className="space-y-4">
               {filteredProfiles.length === 0 ? (
-                <div className="rounded-2xl bg-zinc-950 p-6 text-zinc-400">{isZh ? "没有匹配用户" : "No matching users"}</div>
+                <div className="rounded-2xl bg-zinc-950 p-6 text-zinc-400">
+                  {isZh ? "没有匹配用户" : "No matching users"}
+                </div>
               ) : (
                 filteredProfiles.map((item) => (
                   <div key={item.id} className="rounded-2xl bg-zinc-950 p-4">
@@ -840,15 +1035,29 @@ export default function AdminPage() {
                       </div>
 
                       <div className="flex flex-wrap gap-2 text-xs">
-                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{formatPlan(item.plan)}</div>
+                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                          {formatPlan(item.plan)}
+                        </div>
                         <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
                           {isZh ? "额度" : "Quota"}:{" "}
-                          {item.plan === "studio" ? (isZh ? "无限" : "Unlimited") : `${item.used_count} / ${item.monthly_quota}`}
+                          {item.plan === "studio"
+                            ? isZh
+                              ? "无限"
+                              : "Unlimited"
+                            : `${item.used_count} / ${item.monthly_quota}`}
                         </div>
-                        <div className={`rounded-full border px-3 py-1 ${item.status === "banned" ? "border-red-500/30 text-red-300" : "border-white/10 text-zinc-300"}`}>
+                        <div
+                          className={`rounded-full border px-3 py-1 ${
+                            item.status === "banned"
+                              ? "border-red-500/30 text-red-300"
+                              : "border-white/10 text-zinc-300"
+                          }`}
+                        >
                           {formatStatus(item.status)}
                         </div>
-                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{formatTime(item.updated_at)}</div>
+                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                          {formatTime(item.updated_at)}
+                        </div>
                       </div>
                     </div>
 
@@ -910,7 +1119,9 @@ export default function AdminPage() {
             <div className="mb-4 text-xl font-semibold">{isZh ? "订单列表" : "Order List"}</div>
             <div className="space-y-4">
               {filteredOrders.length === 0 ? (
-                <div className="rounded-2xl bg-zinc-950 p-6 text-zinc-400">{isZh ? "没有匹配订单" : "No matching orders"}</div>
+                <div className="rounded-2xl bg-zinc-950 p-6 text-zinc-400">
+                  {isZh ? "没有匹配订单" : "No matching orders"}
+                </div>
               ) : (
                 filteredOrders.map((item) => (
                   <div key={item.id} className="rounded-2xl bg-zinc-950 p-4">
@@ -920,11 +1131,21 @@ export default function AdminPage() {
                         <div className="mt-1 text-xs text-zinc-500">{item.id}</div>
                       </div>
                       <div className="flex flex-wrap gap-2 text-xs">
-                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{formatPlan(item.plan)}</div>
-                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{formatMoney(item.amount)}</div>
-                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{item.payment_method}</div>
-                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{item.status}</div>
-                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{formatTime(item.created_at)}</div>
+                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                          {formatPlan(item.plan)}
+                        </div>
+                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                          {formatMoney(item.amount)}
+                        </div>
+                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                          {item.payment_method}
+                        </div>
+                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                          {item.status}
+                        </div>
+                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                          {formatTime(item.created_at)}
+                        </div>
                       </div>
                     </div>
 
@@ -946,24 +1167,40 @@ export default function AdminPage() {
 
         {activeTab === "generations" && (
           <div className="mt-8 rounded-3xl border border-white/10 bg-zinc-900 p-6">
-            <div className="mb-4 text-xl font-semibold">{isZh ? "生成记录列表" : "Generation List"}</div>
+            <div className="mb-4 text-xl font-semibold">
+              {isZh ? "生成记录列表" : "Generation List"}
+            </div>
             <div className="space-y-4">
               {filteredGenerations.length === 0 ? (
-                <div className="rounded-2xl bg-zinc-950 p-6 text-zinc-400">{isZh ? "没有匹配生成记录" : "No matching generation records"}</div>
+                <div className="rounded-2xl bg-zinc-950 p-6 text-zinc-400">
+                  {isZh ? "没有匹配生成记录" : "No matching generation records"}
+                </div>
               ) : (
                 filteredGenerations.map((item) => (
                   <div key={item.id} className="rounded-2xl bg-zinc-950 p-4">
                     <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                       <div>
-                        <div className="font-medium">{item.file_name || (isZh ? "未命名文件" : "Untitled file")}</div>
-                        <div className="mt-1 text-xs text-zinc-500">{item.email || "-"} · {item.id}</div>
+                        <div className="font-medium">
+                          {item.file_name || (isZh ? "未命名文件" : "Untitled file")}
+                        </div>
+                        <div className="mt-1 text-xs text-zinc-500">
+                          {item.email || "-"} · {item.id}
+                        </div>
                       </div>
 
                       <div className="flex flex-wrap gap-2 text-xs">
-                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{formatPlan(item.plan)}</div>
-                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{isZh ? "消耗" : "Cost"}: {item.quota_cost}</div>
-                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{item.status}</div>
-                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{formatTime(item.created_at)}</div>
+                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                          {formatPlan(item.plan)}
+                        </div>
+                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                          {isZh ? "消耗" : "Cost"}: {item.quota_cost}
+                        </div>
+                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                          {item.status}
+                        </div>
+                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                          {formatTime(item.created_at)}
+                        </div>
                       </div>
                     </div>
 
@@ -985,11 +1222,15 @@ export default function AdminPage() {
 
         {activeTab === "grant" && (
           <div className="mt-8 rounded-3xl border border-white/10 bg-zinc-900 p-6">
-            <div className="mb-4 text-xl font-semibold">{isZh ? "手动补单 / 赠送套餐" : "Manual Grant / Gift Plan"}</div>
+            <div className="mb-4 text-xl font-semibold">
+              {isZh ? "手动补单 / 赠送套餐" : "Manual Grant / Gift Plan"}
+            </div>
 
             <div className="grid gap-4 md:grid-cols-2">
               <div className="rounded-2xl bg-zinc-950 p-5">
-                <label className="mb-2 block text-sm text-zinc-400">{isZh ? "用户邮箱" : "User Email"}</label>
+                <label className="mb-2 block text-sm text-zinc-400">
+                  {isZh ? "用户邮箱" : "User Email"}
+                </label>
                 <input
                   value={grantEmail}
                   onChange={(e) => setGrantEmail(e.target.value)}
@@ -999,7 +1240,9 @@ export default function AdminPage() {
               </div>
 
               <div className="rounded-2xl bg-zinc-950 p-5">
-                <label className="mb-2 block text-sm text-zinc-400">{isZh ? "套餐类型" : "Plan Type"}</label>
+                <label className="mb-2 block text-sm text-zinc-400">
+                  {isZh ? "套餐类型" : "Plan Type"}
+                </label>
                 <select
                   value={grantPlan}
                   onChange={(e) => setGrantPlan(e.target.value as "free" | "pro" | "studio")}
@@ -1012,7 +1255,9 @@ export default function AdminPage() {
               </div>
 
               <div className="rounded-2xl bg-zinc-950 p-5">
-                <label className="mb-2 block text-sm text-zinc-400">{isZh ? "订单金额（分）" : "Order Amount (cents)"}</label>
+                <label className="mb-2 block text-sm text-zinc-400">
+                  {isZh ? "订单金额（分）" : "Order Amount (cents)"}
+                </label>
                 <input
                   value={grantAmount}
                   onChange={(e) => setGrantAmount(e.target.value)}
@@ -1022,7 +1267,9 @@ export default function AdminPage() {
               </div>
 
               <div className="rounded-2xl bg-zinc-950 p-5">
-                <label className="mb-2 block text-sm text-zinc-400">{isZh ? "支付方式标记" : "Payment Method Label"}</label>
+                <label className="mb-2 block text-sm text-zinc-400">
+                  {isZh ? "支付方式标记" : "Payment Method Label"}
+                </label>
                 <input
                   value={grantMethod}
                   onChange={(e) => setGrantMethod(e.target.value)}
@@ -1045,8 +1292,12 @@ export default function AdminPage() {
                 className="rounded-xl bg-emerald-400 px-6 py-3 text-sm font-semibold text-black disabled:opacity-50"
               >
                 {grantLoading
-                  ? isZh ? "处理中..." : "Processing..."
-                  : isZh ? "确认补单 / 开通套餐" : "Grant Plan Now"}
+                  ? isZh
+                    ? "处理中..."
+                    : "Processing..."
+                  : isZh
+                  ? "确认补单 / 开通套餐"
+                  : "Grant Plan Now"}
               </button>
             </div>
           </div>
