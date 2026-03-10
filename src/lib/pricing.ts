@@ -89,3 +89,15 @@ export function getPlanByKey(plan: string | null | undefined) {
 export function formatPlanPriceCny(price: number) {
   return `¥${price}`;
 }
+
+export function getQuotaText(planKey: string | null | undefined, locale: "zh" | "en") {
+  const plan = getPlanByKey(planKey);
+
+  if (plan.isUnlimited) {
+    return locale === "zh" ? "无限额度" : "Unlimited quota";
+  }
+
+  return locale === "zh"
+    ? `每月 ${plan.quota} 次额度`
+    : `${plan.quota} generations / month`;
+}

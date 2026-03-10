@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import LanguageSwitch from "@/components/LanguageSwitch";
 import BackButton from "@/components/BackButton";
 import { supabase } from "@/lib/supabase";
@@ -19,7 +19,6 @@ type ProfileRow = {
 
 export default function BillingPage() {
   const pathname = usePathname();
-  const router = useRouter();
   const locale = pathname.startsWith("/en") ? "en" : "zh";
   const isZh = locale === "zh";
 
@@ -97,7 +96,7 @@ export default function BillingPage() {
             : "border border-white/10 bg-white/[0.03] text-zinc-200 hover:bg-white/[0.07]"
         }`}
       >
-        {isZh ? "进入账户中心升级" : "Upgrade in Account Center"}
+        {isZh ? "去账户中心升级" : "Upgrade in Account Center"}
       </Link>
     );
   }
@@ -155,8 +154,8 @@ export default function BillingPage() {
 
           <p className="mx-auto mt-6 max-w-3xl text-base leading-8 text-zinc-300 md:text-lg">
             {isZh
-              ? "billing 页面与首页现在使用同一份套餐配置。以后你只需要改一处，首页和套餐页会同时更新。"
-              : "The billing page and homepage now use the same pricing source. Update once, and both pages stay in sync."}
+              ? "billing 页面、首页和账户中心现在使用同一份套餐配置。以后你只需要改一处。"
+              : "The billing page, homepage, and account center now use the same pricing source. Update once, sync everywhere."}
           </p>
         </div>
 
@@ -247,20 +246,20 @@ export default function BillingPage() {
           <div className="mt-5 grid gap-4 md:grid-cols-3">
             <div className="rounded-[24px] border border-white/8 bg-black/25 p-5 text-sm leading-7 text-zinc-300">
               {isZh
-                ? "首页套餐区与 billing 页已经统一使用同一份配置文件。"
-                : "The homepage pricing section and billing page now use the same pricing config."}
+                ? "首页套餐区、billing 页、账户中心已经统一使用同一份配置文件。"
+                : "Homepage pricing, billing page, and account center now use the same pricing config."}
             </div>
 
             <div className="rounded-[24px] border border-white/8 bg-black/25 p-5 text-sm leading-7 text-zinc-300">
               {isZh
                 ? "以后如果你想改价格、额度、文案，只需要修改 src/lib/pricing.ts。"
-                : "If you want to change pricing, quotas, or copy later, edit src/lib/pricing.ts only."}
+                : "To change pricing, quotas, or copy later, edit src/lib/pricing.ts only."}
             </div>
 
             <div className="rounded-[24px] border border-white/8 bg-black/25 p-5 text-sm leading-7 text-zinc-300">
               {isZh
-                ? "如果你后面要接正式支付按钮，我再帮你把这里接到你的支付流程。"
-                : "If you want to connect real payment buttons later, we can wire this page into your payment flow."}
+                ? "如果后面要接正式支付，这一层页面结构已经准备好，不需要再重做展示层。"
+                : "If you connect real payment later, the page structure is already ready and won’t need a redesign."}
             </div>
           </div>
         </div>

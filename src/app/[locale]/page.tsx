@@ -44,7 +44,7 @@ function getExampleScript(isZh: boolean) {
 林晚：你为什么现在才回来？
 顾沉：因为我终于查到了真相。
 林晚：真相？你让我等了三年，现在才来告诉我真相？
-旁白：一场误会，把两个人推向了命运的交叉口。
+旁白：一场误会，把两个人推向命运的交叉口。
 
 场景一：夜雨街头
 林晚站在路灯下，眼眶微红，顾沉撑伞走近。
@@ -676,46 +676,6 @@ export default function HomePage() {
               <p className="mt-4 text-sm leading-7 text-zinc-300">{item.desc}</p>
             </div>
           ))}
-        </div>
-      </section>
-
-      <section className="mx-auto max-w-7xl px-6 py-14">
-        <div className="mb-6">
-          <div className="inline-flex rounded-full border border-emerald-400/20 bg-emerald-400/10 px-4 py-1 text-xs text-emerald-300">
-            {isZh ? "适用场景" : "Use Cases"}
-          </div>
-          <h2 className="mt-4 text-4xl font-bold text-white md:text-5xl">
-            {isZh ? "适合这些创作者与团队" : "Built for these creators and teams"}
-          </h2>
-        </div>
-
-        <div className="grid gap-6 md:grid-cols-3">
-          <div className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-7">
-            <div className="text-2xl font-bold text-white">{isZh ? "短剧创作者" : "Short Drama Creators"}</div>
-            <p className="mt-4 text-sm leading-7 text-zinc-300">
-              {isZh
-                ? "适合快速测试剧情节奏、角色关系和爆点文案。"
-                : "Great for quickly testing pacing, character relationships, and high-conversion hooks."}
-            </p>
-          </div>
-
-          <div className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-7">
-            <div className="text-2xl font-bold text-white">{isZh ? "漫剧团队" : "Comic Teams"}</div>
-            <p className="mt-4 text-sm leading-7 text-zinc-300">
-              {isZh
-                ? "适合把文字剧本整理成分镜结构，便于后续出图和制作。"
-                : "Useful for turning text scripts into storyboard-ready structure for later image production."}
-            </p>
-          </div>
-
-          <div className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-7">
-            <div className="text-2xl font-bold text-white">{isZh ? "内容工作室" : "Content Studios"}</div>
-            <p className="mt-4 text-sm leading-7 text-zinc-300">
-              {isZh
-                ? "适合长期项目管理、批量改稿和任务化内容生产。"
-                : "Designed for long-running projects, iterative editing, and task-based content operations."}
-            </p>
-          </div>
         </div>
       </section>
 
