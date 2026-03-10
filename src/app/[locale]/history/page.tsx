@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 
 type GenerationRow = {
   id: string;
+  job_id: string | null;
   user_id: string;
   email: string | null;
   file_name: string | null;
@@ -92,6 +93,12 @@ export default function HistoryPage() {
 
           <div className="flex items-center gap-3">
             <Link
+              href={`/${locale}/jobs`}
+              className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-300 transition hover:bg-white/5"
+            >
+              {isZh ? "任务中心" : "Jobs"}
+            </Link>
+            <Link
               href={`/${locale}/account`}
               className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-300 transition hover:bg-white/5"
             >
@@ -102,10 +109,10 @@ export default function HistoryPage() {
         </div>
       </header>
 
-      <section className="mx-auto max-w-6xl px-6 py-14">
+      <section className="mx-auto max-w-7xl px-6 py-14">
         <div className="mb-8">
           <div className="mb-4 inline-flex rounded-full border border-emerald-400/20 bg-emerald-400/10 px-4 py-1 text-xs text-emerald-300">
-            {isZh ? "项目生成历史" : "Project Generation Records"}
+            {isZh ? "作品历史" : "History"}
           </div>
 
           <h1 className="text-4xl font-bold">
@@ -114,31 +121,33 @@ export default function HistoryPage() {
 
           <p className="mt-3 text-zinc-400">
             {isZh
-              ? "这里会记录你每次生成时上传的文件、使用的套餐和消耗额度。"
-              : "This page records each generation with uploaded file, plan used, and quota cost."}
+              ? "这里会记录你每次生成成功写入的项目。"
+              : "This page records successful generation entries written into your history."}
           </p>
         </div>
 
         <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6">
+          <div className="mb-4 text-xl font-semibold">
+            {isZh ? "历史列表" : "History List"}
+          </div>
+
           {records.length === 0 ? (
-            <div className="rounded-2xl bg-zinc-950 p-8 text-center text-zinc-400">
+            <div className="rounded-2xl bg-zinc-950 p-6 text-zinc-400">
               {isZh ? "暂时没有生成记录" : "No generation records yet"}
             </div>
           ) : (
             <div className="space-y-4">
               {records.map((item) => (
-                <div key={item.id} className="rounded-2xl bg-zinc-950 p-5">
-                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div key={item.id} className="rounded-2xl bg-zinc-950 p-4">
+                  <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                     <div>
-                      <div className="text-lg font-semibold">
+                      <div className="font-medium">
                         {item.file_name || (isZh ? "未命名文件" : "Untitled file")}
                       </div>
-                      <div className="mt-1 text-sm text-zinc-400">
-                        {formatTime(item.created_at)}
-                      </div>
+                      <div className="mt-1 text-xs text-zinc-500">{formatTime(item.created_at)}</div>
                     </div>
 
-                    <div className="flex flex-wrap gap-3 text-sm">
+                    <div className="flex flex-wrap gap-2 text-xs">
                       <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
                         {isZh ? "套餐：" : "Plan: "} {formatPlan(item.plan)}
                       </div>
@@ -150,6 +159,17 @@ export default function HistoryPage() {
                       </div>
                     </div>
                   </div>
+
+                  {item.job_id && (
+                    <div className="mt-4">
+                      <Link
+                        href={`/${locale}/result?job=${item.job_id}`}
+                        className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-sm text-emerald-300"
+                      >
+                        {isZh ? "查看结果详情" : "View Result"}
+                      </Link>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

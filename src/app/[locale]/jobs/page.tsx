@@ -145,15 +145,9 @@ export default function JobsPage() {
   }
 
   function getStatusStyle(status: string) {
-    if (status === "success") {
-      return "border-emerald-400/30 bg-emerald-400/10 text-emerald-300";
-    }
-    if (status === "failed") {
-      return "border-red-500/30 bg-red-500/10 text-red-300";
-    }
-    if (status === "processing") {
-      return "border-blue-500/30 bg-blue-500/10 text-blue-300";
-    }
+    if (status === "success") return "border-emerald-400/30 bg-emerald-400/10 text-emerald-300";
+    if (status === "failed") return "border-red-500/30 bg-red-500/10 text-red-300";
+    if (status === "processing") return "border-blue-500/30 bg-blue-500/10 text-blue-300";
     return "border-white/10 bg-zinc-900 text-zinc-300";
   }
 
@@ -227,7 +221,7 @@ export default function JobsPage() {
 
           <p className="mt-3 text-zinc-400">
             {isZh
-              ? "查看你的剧本生成任务进度、状态、结果链接和失败原因。页面会自动刷新。"
+              ? "查看你的生成任务进度、状态、结果链接和失败原因。页面会自动刷新。"
               : "Track job progress, status, result links, and failure reasons. This page auto-refreshes."}
           </p>
 
@@ -322,30 +316,13 @@ export default function JobsPage() {
                         {item.script_title || (isZh ? "未命名任务" : "Untitled job")}
                       </div>
 
-                      <div className="mt-1 text-xs text-zinc-500">
-                        {item.email || "-"}
-                      </div>
+                      <div className="mt-1 text-xs text-zinc-500">{item.email || "-"}</div>
 
-                      <div className="mt-1 break-all text-xs text-zinc-500">
-                        {item.id}
-                      </div>
+                      <div className="mt-1 break-all text-xs text-zinc-500">{item.id}</div>
 
                       {item.error_message && (
                         <div className="mt-3 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300">
                           {isZh ? "错误信息：" : "Error: "} {item.error_message}
-                        </div>
-                      )}
-
-                      {item.result_url && (
-                        <div className="mt-3 text-xs">
-                          <a
-                            href={item.result_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-emerald-300 underline"
-                          >
-                            {isZh ? "打开结果链接" : "Open Result URL"}
-                          </a>
                         </div>
                       )}
                     </div>
@@ -355,9 +332,7 @@ export default function JobsPage() {
                         {formatPlan(item.plan)}
                       </div>
 
-                      <div
-                        className={`rounded-full border px-3 py-1 ${getStatusStyle(item.status)}`}
-                      >
+                      <div className={`rounded-full border px-3 py-1 ${getStatusStyle(item.status)}`}>
                         {formatJobStatus(item.status)}
                       </div>
 
@@ -387,9 +362,33 @@ export default function JobsPage() {
                             ? "bg-blue-400"
                             : "bg-zinc-400"
                         }`}
-                        style={{ width: `${Math.max(Math.min(item.progress, 100), item.progress > 0 ? 6 : 0)}%` }}
+                        style={{
+                          width: `${Math.max(Math.min(item.progress, 100), item.progress > 0 ? 6 : 0)}%`,
+                        }}
                       />
                     </div>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    {item.status === "success" ? (
+                      <Link
+                        href={`/${locale}/result?job=${item.id}`}
+                        className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-sm text-emerald-300"
+                      >
+                        {isZh ? "查看结果" : "View Result"}
+                      </Link>
+                    ) : null}
+
+                    {item.result_url ? (
+                      <a
+                        href={item.result_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-200"
+                      >
+                        {isZh ? "打开结果链接" : "Open Result URL"}
+                      </a>
+                    ) : null}
                   </div>
                 </div>
               ))
