@@ -160,7 +160,7 @@ export default function ResultPage() {
         value: payload.storyboard.length,
       },
       {
-        label: isZh ? "封面文案条数" : "Cover Copy Items",
+        label: isZh ? "封面文案" : "Cover Copies",
         value: payload.coverCopy.length,
       },
       {
@@ -189,9 +189,16 @@ export default function ResultPage() {
     return status || "-";
   }
 
+  function getStatusStyle(status?: string) {
+    if (status === "success") return "border-emerald-400/20 bg-emerald-400/10 text-emerald-300";
+    if (status === "failed") return "border-red-500/20 bg-red-500/10 text-red-300";
+    if (status === "processing") return "border-blue-500/20 bg-blue-500/10 text-blue-300";
+    return "border-white/10 bg-white/[0.03] text-zinc-300";
+  }
+
   if (loading) {
     return (
-      <main className="min-h-screen bg-zinc-950 text-white">
+      <main className="min-h-screen bg-[#06070a] text-white">
         <div className="flex min-h-screen items-center justify-center text-zinc-400">
           {isZh ? "结果加载中..." : "Loading result..."}
         </div>
@@ -200,13 +207,18 @@ export default function ResultPage() {
   }
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-white">
-      <header className="sticky top-0 z-30 border-b border-white/10 bg-zinc-950/80 backdrop-blur">
+    <main className="min-h-screen bg-[#06070a] text-white">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute left-[-120px] top-[100px] h-[320px] w-[320px] rounded-full bg-emerald-500/10 blur-3xl" />
+        <div className="absolute right-[-120px] top-[220px] h-[360px] w-[360px] rounded-full bg-cyan-500/10 blur-3xl" />
+      </div>
+
+      <header className="sticky top-0 z-30 border-b border-white/10 bg-[#06070a]/80 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3">
             <BackButton fallbackHref={`/${locale}/jobs`} />
             <div>
-              <div className="text-xl font-semibold tracking-tight">FulushouVideo</div>
+              <div className="text-xl font-semibold tracking-tight text-white">FulushouVideo</div>
               <div className="text-xs text-zinc-400">
                 {isZh ? "生成结果" : "Generation Result"}
               </div>
@@ -216,13 +228,13 @@ export default function ResultPage() {
           <div className="flex items-center gap-3">
             <Link
               href={`/${locale}/jobs`}
-              className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-300 transition hover:bg-white/5"
+              className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-zinc-200 transition hover:bg-white/[0.07]"
             >
               {isZh ? "任务中心" : "Jobs"}
             </Link>
             <Link
               href={`/${locale}/generate`}
-              className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-300 transition hover:bg-white/5"
+              className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-zinc-200 transition hover:bg-white/[0.07]"
             >
               {isZh ? "重新生成" : "Generate Again"}
             </Link>
@@ -231,237 +243,413 @@ export default function ResultPage() {
         </div>
       </header>
 
-      <section className="mx-auto max-w-7xl px-6 py-14">
-        <div className="mb-8">
-          <div className="mb-4 inline-flex rounded-full border border-emerald-400/20 bg-emerald-400/10 px-4 py-1 text-xs text-emerald-300">
-            {isZh ? "结构化结果页" : "Structured Result"}
-          </div>
-
-          <h1 className="text-4xl font-bold">
-            {isZh ? "生成结果" : "Generation Result"}
-          </h1>
-
-          <p className="mt-3 text-zinc-400">
-            {isZh
-              ? "这里展示本次生成任务产出的结构化内容，后续可继续接入图片、配音、视频合成。"
-              : "This page shows the structured output of the job and can later be extended with images, voice, and final video composition."}
-          </p>
-        </div>
-
-        {errorMessage && (
-          <div className="mb-6 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-            {errorMessage}
-          </div>
-        )}
-
-        {job && (
-          <div className="mb-8 grid gap-4 md:grid-cols-4">
-            <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6">
-              <div className="text-sm text-zinc-400">{isZh ? "任务状态" : "Job Status"}</div>
-              <div className="mt-3 text-2xl font-bold">{formatJobStatus(job.status)}</div>
+      <section className="relative mx-auto max-w-7xl px-6 pb-10 pt-16">
+        <div className="grid items-start gap-10 xl:grid-cols-[1.02fr_0.98fr]">
+          <div>
+            <div className="mb-5 inline-flex items-center rounded-full border border-emerald-400/20 bg-emerald-400/10 px-4 py-1 text-xs font-medium text-emerald-300">
+              {isZh ? "结构化结果页" : "Structured Result"}
             </div>
-            <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6">
-              <div className="text-sm text-zinc-400">{isZh ? "任务进度" : "Progress"}</div>
-              <div className="mt-3 text-2xl font-bold">{job.progress}%</div>
-            </div>
-            <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6">
-              <div className="text-sm text-zinc-400">{isZh ? "套餐" : "Plan"}</div>
-              <div className="mt-3 text-2xl font-bold">{formatPlan(job.plan)}</div>
-            </div>
-            <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6">
-              <div className="text-sm text-zinc-400">{isZh ? "创建时间" : "Created At"}</div>
-              <div className="mt-3 text-sm font-medium">{formatTime(job.created_at)}</div>
-            </div>
-          </div>
-        )}
 
-        {!payload ? (
-          <div className="rounded-3xl border border-white/10 bg-zinc-900 p-8 text-zinc-400">
-            {isZh ? "当前没有可展示的结构化结果。" : "There is no structured result to display yet."}
-          </div>
-        ) : (
-          <>
-            <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+            <h1 className="max-w-4xl text-5xl font-bold leading-[1.08] tracking-tight text-white md:text-6xl">
+              {isZh ? "查看你的生成结果与结构化内容" : "Review your generated structured output"}
+            </h1>
+
+            <p className="mt-6 max-w-2xl text-lg leading-8 text-zinc-300">
+              {isZh
+                ? "这里会展示剧本解析后的结构化结果，包括项目信息、剧情摘要、角色列表、分镜脚本和封面文案建议。"
+                : "This page shows your structured output, including project info, story summary, characters, storyboard, and cover copy suggestions."}
+            </p>
+
+            <div className="mt-8 flex flex-wrap gap-3">
+              <div className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-zinc-300">
+                {isZh ? "结构化输出" : "Structured Output"}
+              </div>
+              <div className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-zinc-300">
+                {isZh ? "角色与分镜" : "Characters & Storyboard"}
+              </div>
+              <div className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-zinc-300">
+                {isZh ? "任务结果" : "Job Result"}
+              </div>
+            </div>
+
+            <div className="mt-10 grid gap-4 sm:grid-cols-4">
               {stats.map((item) => (
-                <div key={item.label} className="rounded-3xl border border-white/10 bg-zinc-900 p-6">
+                <div
+                  key={item.label}
+                  className="rounded-[28px] border border-white/10 bg-gradient-to-b from-white/[0.06] to-white/[0.03] p-5 shadow-[0_10px_30px_rgba(0,0,0,0.25)]"
+                >
                   <div className="text-sm text-zinc-400">{item.label}</div>
-                  <div className="mt-3 text-4xl font-bold">{item.value}</div>
+                  <div className="mt-3 text-3xl font-bold text-white">{item.value}</div>
                 </div>
               ))}
             </div>
+          </div>
 
-            <div className="mt-8 grid gap-6 xl:grid-cols-3">
-              <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6 xl:col-span-2">
-                <div className="mb-4 text-xl font-semibold">
+          <div className="relative">
+            <div className="absolute inset-0 rounded-[32px] bg-gradient-to-br from-emerald-400/10 via-transparent to-cyan-400/10 blur-xl" />
+            <div className="relative rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900/95 to-zinc-950/95 p-6 shadow-[0_20px_80px_rgba(0,0,0,0.45)]">
+              <div className="text-3xl font-bold text-white">
+                {isZh ? "任务摘要" : "Job Summary"}
+              </div>
+              <div className="mt-2 text-sm text-zinc-400">
+                {isZh ? "当前任务的状态、套餐和结果入口。" : "Status, plan, and result access for the current job."}
+              </div>
+
+              {errorMessage && (
+                <div className="mt-4 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                  {errorMessage}
+                </div>
+              )}
+
+              <div className="mt-6 rounded-[24px] border border-white/8 bg-black/40 p-5">
+                <div className="text-sm text-zinc-400">{isZh ? "任务状态" : "Job Status"}</div>
+                <div className="mt-3 flex items-center gap-3">
+                  <div className={`rounded-full border px-3 py-1 text-sm ${getStatusStyle(job?.status)}`}>
+                    {formatJobStatus(job?.status)}
+                  </div>
+                  <div className="text-sm text-zinc-300">
+                    {isZh ? `进度 ${job?.progress ?? 0}%` : `Progress ${job?.progress ?? 0}%`}
+                  </div>
+                </div>
+                <div className="mt-4 h-3 rounded-full bg-zinc-900">
+                  <div
+                    className={`h-3 rounded-full ${
+                      job?.status === "success"
+                        ? "bg-emerald-400"
+                        : job?.status === "failed"
+                        ? "bg-red-400"
+                        : job?.status === "processing"
+                        ? "bg-blue-400"
+                        : "bg-zinc-400"
+                    }`}
+                    style={{ width: `${Math.max(Math.min(job?.progress ?? 0, 100), job?.progress ? 6 : 0)}%` }}
+                  />
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <div className="rounded-[24px] border border-white/8 bg-black/40 p-5">
+                  <div className="text-sm text-zinc-400">{isZh ? "套餐" : "Plan"}</div>
+                  <div className="mt-3 text-3xl font-bold text-white">{formatPlan(job?.plan)}</div>
+                </div>
+
+                <div className="rounded-[24px] border border-white/8 bg-black/40 p-5">
+                  <div className="text-sm text-zinc-400">{isZh ? "消耗额度" : "Quota Cost"}</div>
+                  <div className="mt-3 text-3xl font-bold text-white">{job?.quota_cost ?? 0}</div>
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-[24px] border border-white/8 bg-black/40 p-5">
+                <div className="text-sm text-zinc-400">{isZh ? "创建时间" : "Created At"}</div>
+                <div className="mt-3 text-base text-zinc-200">{formatTime(job?.created_at)}</div>
+              </div>
+
+              <div className="mt-4 rounded-[24px] border border-white/8 bg-black/40 p-5">
+                <div className="text-sm text-zinc-400">{isZh ? "更新时间" : "Updated At"}</div>
+                <div className="mt-3 text-base text-zinc-200">{formatTime(job?.updated_at)}</div>
+              </div>
+
+              {job?.error_message ? (
+                <div className="mt-4 rounded-[24px] border border-red-500/20 bg-red-500/10 p-5">
+                  <div className="text-sm text-red-300">{isZh ? "错误信息" : "Error Message"}</div>
+                  <div className="mt-3 text-sm leading-7 text-red-200">{job.error_message}</div>
+                </div>
+              ) : null}
+
+              <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                {job?.result_url ? (
+                  <a
+                    href={job.result_url}
+                    className="rounded-2xl bg-emerald-400 px-6 py-3 text-center text-sm font-semibold text-black transition hover:bg-emerald-300"
+                  >
+                    {isZh ? "打开结果链接" : "Open Result URL"}
+                  </a>
+                ) : (
+                  <Link
+                    href={`/${locale}/jobs`}
+                    className="rounded-2xl bg-emerald-400 px-6 py-3 text-center text-sm font-semibold text-black transition hover:bg-emerald-300"
+                  >
+                    {isZh ? "返回任务中心" : "Back to Jobs"}
+                  </Link>
+                )}
+
+                <Link
+                  href={`/${locale}/generate`}
+                  className="rounded-2xl border border-white/10 bg-white/[0.03] px-6 py-3 text-center text-sm text-zinc-200 transition hover:bg-white/[0.07]"
+                >
+                  {isZh ? "继续生成" : "Generate Again"}
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {!payload ? (
+        <section className="mx-auto max-w-7xl px-6 pb-20">
+          <div className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-10 text-center">
+            <div className="text-2xl font-bold text-white">
+              {isZh ? "当前没有可展示的结构化结果" : "No structured result available"}
+            </div>
+            <div className="mt-3 text-zinc-400">
+              {isZh ? "你可以返回任务中心，或者重新创建新的生成任务。"
+ : "You can go back to the jobs center or start a new generation."}
+            </div>
+            <div className="mt-6 flex justify-center gap-4">
+              <Link
+                href={`/${locale}/jobs`}
+                className="rounded-2xl border border-white/10 bg-white/[0.03] px-6 py-3 text-sm text-zinc-200"
+              >
+                {isZh ? "返回任务中心" : "Back to Jobs"}
+              </Link>
+              <Link
+                href={`/${locale}/generate`}
+                className="rounded-2xl bg-emerald-400 px-6 py-3 text-sm font-semibold text-black"
+              >
+                {isZh ? "去生成" : "Create Now"}
+              </Link>
+            </div>
+          </div>
+        </section>
+      ) : (
+        <>
+          <section className="mx-auto max-w-7xl px-6 py-12">
+            <div className="rounded-[32px] border border-white/10 bg-gradient-to-r from-zinc-900/90 via-zinc-900/80 to-zinc-900/90 p-8 shadow-[0_10px_40px_rgba(0,0,0,0.25)]">
+              <div className="max-w-4xl">
+                <div className="text-sm font-medium text-emerald-300">
+                  {isZh ? "项目定位" : "Project Snapshot"}
+                </div>
+                <h2 className="mt-3 text-4xl font-bold leading-tight text-white">
+                  {payload.aiTitle || payload.title || (isZh ? "未命名项目" : "Untitled Project")}
+                </h2>
+                <p className="mt-4 text-base leading-8 text-zinc-300">
+                  {payload.summary || (isZh ? "暂无剧情摘要" : "No story summary yet.")}
+                </p>
+              </div>
+            </div>
+          </section>
+
+          <section className="mx-auto max-w-7xl px-6 py-12">
+            <div className="grid gap-6 xl:grid-cols-3">
+              <div className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-7 xl:col-span-2">
+                <div className="mb-5 text-3xl font-bold text-white">
                   {isZh ? "项目信息" : "Project Information"}
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2">
-                  <div className="rounded-2xl bg-zinc-950 p-4">
-                    <div className="text-xs text-zinc-500">{isZh ? "剧名" : "Title"}</div>
-                    <div className="mt-2 font-medium">{payload.title || "-"}</div>
+                  <div className="rounded-[24px] border border-white/8 bg-black/25 p-5">
+                    <div className="text-sm text-zinc-400">{isZh ? "剧名" : "Title"}</div>
+                    <div className="mt-3 text-xl font-semibold text-white">{payload.title || "-"}</div>
                   </div>
-                  <div className="rounded-2xl bg-zinc-950 p-4">
-                    <div className="text-xs text-zinc-500">{isZh ? "AI 标题" : "AI Title"}</div>
-                    <div className="mt-2 font-medium">{payload.aiTitle || "-"}</div>
+
+                  <div className="rounded-[24px] border border-white/8 bg-black/25 p-5">
+                    <div className="text-sm text-zinc-400">{isZh ? "AI 标题" : "AI Title"}</div>
+                    <div className="mt-3 text-xl font-semibold text-white">{payload.aiTitle || "-"}</div>
                   </div>
-                  <div className="rounded-2xl bg-zinc-950 p-4">
-                    <div className="text-xs text-zinc-500">{isZh ? "项目类型" : "Project Type"}</div>
-                    <div className="mt-2 font-medium">{payload.projectType || "-"}</div>
+
+                  <div className="rounded-[24px] border border-white/8 bg-black/25 p-5">
+                    <div className="text-sm text-zinc-400">{isZh ? "项目类型" : "Project Type"}</div>
+                    <div className="mt-3 text-xl font-semibold text-white">{payload.projectType || "-"}</div>
                   </div>
-                  <div className="rounded-2xl bg-zinc-950 p-4">
-                    <div className="text-xs text-zinc-500">{isZh ? "题材类型" : "Genre"}</div>
-                    <div className="mt-2 font-medium">{payload.genre || "-"}</div>
+
+                  <div className="rounded-[24px] border border-white/8 bg-black/25 p-5">
+                    <div className="text-sm text-zinc-400">{isZh ? "题材类型" : "Genre"}</div>
+                    <div className="mt-3 text-xl font-semibold text-white">{payload.genre || "-"}</div>
                   </div>
-                  <div className="rounded-2xl bg-zinc-950 p-4">
-                    <div className="text-xs text-zinc-500">{isZh ? "规格" : "Spec"}</div>
-                    <div className="mt-2 font-medium">{payload.spec || "-"}</div>
+
+                  <div className="rounded-[24px] border border-white/8 bg-black/25 p-5">
+                    <div className="text-sm text-zinc-400">{isZh ? "规格" : "Spec"}</div>
+                    <div className="mt-3 text-xl font-semibold text-white">{payload.spec || "-"}</div>
                   </div>
-                  <div className="rounded-2xl bg-zinc-950 p-4">
-                    <div className="text-xs text-zinc-500">{isZh ? "题材亮点" : "Highlight"}</div>
-                    <div className="mt-2 font-medium">{payload.highlight || "-"}</div>
+
+                  <div className="rounded-[24px] border border-white/8 bg-black/25 p-5">
+                    <div className="text-sm text-zinc-400">{isZh ? "亮点" : "Highlight"}</div>
+                    <div className="mt-3 text-sm leading-7 text-zinc-300">{payload.highlight || "-"}</div>
                   </div>
                 </div>
               </div>
 
-              <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6">
-                <div className="mb-4 text-xl font-semibold">
-                  {isZh ? "导出与跳转" : "Export & Actions"}
+              <div className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-7">
+                <div className="mb-5 text-3xl font-bold text-white">
+                  {isZh ? "爆点文案" : "Hook Copy"}
                 </div>
 
-                <div className="space-y-3">
-                  {job?.result_url ? (
-                    <a
-                      href={job.result_url}
-                      className="block rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-300"
-                    >
-                      {isZh ? "打开结果链接" : "Open Result URL"}
-                    </a>
-                  ) : null}
+                <div className="rounded-[24px] border border-emerald-400/15 bg-emerald-400/10 p-5 text-base leading-8 text-zinc-100">
+                  {payload.hook || (isZh ? "暂无爆点文案" : "No hook copy")}
+                </div>
 
-                  <Link
-                    href={`/${locale}/jobs`}
-                    className="block rounded-xl border border-white/10 px-4 py-3 text-sm text-zinc-200"
-                  >
-                    {isZh ? "返回任务中心" : "Back to Jobs"}
-                  </Link>
-
-                  <Link
-                    href={`/${locale}/history`}
-                    className="block rounded-xl border border-white/10 px-4 py-3 text-sm text-zinc-200"
-                  >
-                    {isZh ? "查看生成历史" : "Open History"}
-                  </Link>
-
-                  <Link
-                    href={`/${locale}/generate`}
-                    className="block rounded-xl border border-white/10 px-4 py-3 text-sm text-zinc-200"
-                  >
-                    {isZh ? "继续生成新项目" : "Generate New Project"}
-                  </Link>
+                <div className="mt-5 text-sm text-zinc-400">
+                  {isZh ? "这部分适合首页传播、封面文案和短视频开头钩子。"
+ : "This section is suitable for cover text, distribution hooks, and opening lines."}
                 </div>
               </div>
             </div>
+          </section>
 
-            <div className="mt-8 rounded-3xl border border-white/10 bg-zinc-900 p-6">
-              <div className="mb-4 text-xl font-semibold">
-                {isZh ? "爆点文案" : "Hook Line"}
-              </div>
-              <div className="rounded-2xl bg-zinc-950 p-4 text-zinc-200">
-                {payload.hook || (isZh ? "暂无爆点文案" : "No hook line")}
-              </div>
-            </div>
-
-            <div className="mt-8 rounded-3xl border border-white/10 bg-zinc-900 p-6">
-              <div className="mb-4 text-xl font-semibold">
-                {isZh ? "封面文案建议" : "Cover Copy Suggestions"}
+          <section className="mx-auto max-w-7xl px-6 py-12">
+            <div className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-7">
+              <div className="mb-5 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-medium text-emerald-300">
+                    {isZh ? "封面文案建议" : "Cover Copy Suggestions"}
+                  </div>
+                  <div className="mt-2 text-3xl font-bold text-white">
+                    {isZh ? "更适合传播的标题与封面内容" : "Copy ideas better suited for distribution"}
+                  </div>
+                </div>
               </div>
 
               {payload.coverCopy.length > 0 ? (
                 <div className="grid gap-4 md:grid-cols-3">
                   {payload.coverCopy.map((item, index) => (
-                    <div key={`${item}-${index}`} className="rounded-2xl bg-zinc-950 p-4 text-sm text-zinc-200">
+                    <div
+                      key={`${item}-${index}`}
+                      className="rounded-[24px] border border-white/8 bg-black/25 p-5 text-sm leading-7 text-zinc-200"
+                    >
                       {item}
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="rounded-2xl bg-zinc-950 p-4 text-zinc-400">
-                  {isZh ? "暂无封面文案" : "No cover copy"}
+                <div className="rounded-[24px] border border-white/8 bg-black/25 p-5 text-zinc-400">
+                  {isZh ? "暂无封面文案建议" : "No cover copy suggestions"}
                 </div>
               )}
             </div>
+          </section>
 
-            <div className="mt-8 grid gap-6 xl:grid-cols-3">
-              <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6 xl:col-span-2">
-                <div className="mb-4 text-xl font-semibold">
+          <section className="mx-auto max-w-7xl px-6 py-12">
+            <div className="grid gap-6 xl:grid-cols-3">
+              <div className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-7 xl:col-span-2">
+                <div className="mb-5 text-3xl font-bold text-white">
                   {isZh ? "剧情摘要" : "Story Summary"}
                 </div>
-                <div className="rounded-2xl bg-zinc-950 p-4 whitespace-pre-wrap text-zinc-200">
-                  {payload.summary || (isZh ? "暂无摘要" : "No summary")}
+                <div className="rounded-[24px] border border-white/8 bg-black/25 p-5 whitespace-pre-wrap text-base leading-8 text-zinc-200">
+                  {payload.summary || (isZh ? "暂无剧情摘要" : "No summary")}
                 </div>
               </div>
 
-              <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6">
-                <div className="mb-4 text-xl font-semibold">
+              <div className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-7">
+                <div className="mb-5 text-3xl font-bold text-white">
                   {isZh ? "角色列表" : "Characters"}
                 </div>
 
                 {payload.characters.length > 0 ? (
                   <div className="space-y-3">
                     {payload.characters.map((name) => (
-                      <div key={name} className="rounded-2xl bg-zinc-950 p-4">
-                        <div className="font-medium">{name}</div>
-                        <div className="mt-1 text-xs text-zinc-500">
+                      <div
+                        key={name}
+                        className="rounded-[24px] border border-white/8 bg-black/25 p-5"
+                      >
+                        <div className="text-lg font-semibold text-white">{name}</div>
+                        <div className="mt-2 text-sm text-zinc-400">
                           {isZh ? "从剧本中自动识别" : "Auto-detected from script"}
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="rounded-2xl bg-zinc-950 p-4 text-zinc-400">
+                  <div className="rounded-[24px] border border-white/8 bg-black/25 p-5 text-zinc-400">
                     {isZh ? "暂无角色数据" : "No character data"}
                   </div>
                 )}
               </div>
             </div>
+          </section>
 
-            <div className="mt-8 rounded-3xl border border-white/10 bg-zinc-900 p-6">
-              <div className="mb-4 text-xl font-semibold">
-                {isZh ? "分镜脚本" : "Storyboard"}
+          <section className="mx-auto max-w-7xl px-6 py-12">
+            <div className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-7">
+              <div className="mb-5 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-medium text-emerald-300">
+                    {isZh ? "分镜脚本" : "Storyboard"}
+                  </div>
+                  <div className="mt-2 text-3xl font-bold text-white">
+                    {isZh ? "适合短剧与漫剧制作的镜头结构" : "Shot structure for drama and comic production"}
+                  </div>
+                </div>
               </div>
 
               {payload.storyboard.length > 0 ? (
                 <div className="grid gap-4 md:grid-cols-2">
                   {payload.storyboard.map((item) => (
-                    <div key={item.shot} className="rounded-2xl bg-zinc-950 p-4">
-                      <div className="text-xs text-zinc-500">
-                        {isZh ? "镜头" : "Shot"} {item.shot}
+                    <div
+                      key={item.shot}
+                      className="rounded-[24px] border border-white/8 bg-black/25 p-5"
+                    >
+                      <div className="inline-flex rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-xs text-emerald-300">
+                        {isZh ? `镜头 ${item.shot}` : `Shot ${item.shot}`}
                       </div>
-                      <div className="mt-2 font-medium">{item.title}</div>
-                      <div className="mt-2 text-sm text-zinc-300">{item.desc}</div>
+                      <div className="mt-4 text-xl font-semibold text-white">{item.title}</div>
+                      <div className="mt-3 text-sm leading-7 text-zinc-300">{item.desc}</div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="rounded-2xl bg-zinc-950 p-4 text-zinc-400">
+                <div className="rounded-[24px] border border-white/8 bg-black/25 p-5 text-zinc-400">
                   {isZh ? "暂无分镜数据" : "No storyboard data"}
                 </div>
               )}
             </div>
+          </section>
 
-            <div className="mt-8 rounded-3xl border border-white/10 bg-zinc-900 p-6">
-              <div className="mb-4 text-xl font-semibold">
-                {isZh ? "剧本内容" : "Script Content"}
+          <section className="mx-auto max-w-7xl px-6 py-12">
+            <div className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-7">
+              <div className="mb-5 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-medium text-emerald-300">
+                    {isZh ? "原始剧本" : "Original Script"}
+                  </div>
+                  <div className="mt-2 text-3xl font-bold text-white">
+                    {isZh ? "本次生成使用的剧本内容" : "Script content used for this job"}
+                  </div>
+                </div>
               </div>
 
-              <pre className="overflow-auto rounded-2xl bg-zinc-950 p-4 whitespace-pre-wrap text-sm text-zinc-300">
+              <pre className="overflow-auto rounded-[24px] border border-white/8 bg-black/25 p-5 whitespace-pre-wrap text-sm leading-7 text-zinc-300">
                 {payload.script || (isZh ? "暂无剧本内容" : "No script content")}
               </pre>
             </div>
-          </>
-        )}
-      </section>
+          </section>
+
+          <section className="mx-auto max-w-7xl px-6 py-20">
+            <div className="relative overflow-hidden rounded-[36px] border border-emerald-400/20 bg-gradient-to-br from-emerald-400/15 via-emerald-400/10 to-cyan-400/10 p-10 text-center shadow-[0_20px_80px_rgba(16,185,129,0.08)]">
+              <div className="absolute left-0 top-0 h-40 w-40 rounded-full bg-emerald-400/10 blur-3xl" />
+              <div className="absolute bottom-0 right-0 h-40 w-40 rounded-full bg-cyan-400/10 blur-3xl" />
+
+              <div className="relative text-sm font-medium text-emerald-200">
+                {isZh ? "继续创作" : "Continue Creating"}
+              </div>
+
+              <h2 className="relative mt-3 text-4xl font-bold leading-tight text-white md:text-5xl">
+                {isZh ? "继续创建新的任务，让内容生产持续推进" : "Create new jobs and keep your workflow moving"}
+              </h2>
+
+              <p className="relative mx-auto mt-4 max-w-3xl text-base leading-8 text-zinc-200">
+                {isZh
+                  ? "你可以返回任务中心查看全部任务，也可以继续上传新剧本开始下一轮生成。"
+                  : "You can go back to the jobs center or upload a new script to start the next generation."}
+              </p>
+
+              <div className="relative mt-8 flex flex-wrap items-center justify-center gap-4">
+                <Link
+                  href={`/${locale}/jobs`}
+                  className="rounded-2xl bg-black px-6 py-3 text-sm font-semibold text-white transition hover:bg-zinc-800"
+                >
+                  {isZh ? "返回任务中心" : "Back to Jobs"}
+                </Link>
+
+                <Link
+                  href={`/${locale}/generate`}
+                  className="rounded-2xl border border-white/20 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/[0.05]"
+                >
+                  {isZh ? "继续生成" : "Generate Again"}
+                </Link>
+              </div>
+            </div>
+          </section>
+        </>
+      )}
     </main>
   );
 }
