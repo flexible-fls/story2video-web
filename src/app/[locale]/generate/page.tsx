@@ -6,7 +6,6 @@ import { usePathname, useRouter } from "next/navigation";
 import LanguageSwitch from "@/components/LanguageSwitch";
 import BackButton from "@/components/BackButton";
 import { supabase } from "@/lib/supabase";
-import { logActivity } from "@/lib/activity";
 
 type ProfileRow = {
   id: string;
@@ -66,148 +65,6 @@ function loadDraftScript() {
   };
 }
 
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function extractTitle(script: string, isZh: boolean) {
-  const firstLine = script
-    .split("\n")
-    .map((line) => line.trim())
-    .find(Boolean);
-
-  if (!firstLine) {
-    return isZh ? "未命名项目" : "Untitled Project";
-  }
-
-  return firstLine.slice(0, 30);
-}
-
-function detectProjectType(script: string, isZh: boolean) {
-  if (/漫画|漫剧|comic|manga/i.test(script)) {
-    return isZh ? "AI 漫剧项目" : "AI Comic Project";
-  }
-  return isZh ? "AI 短剧项目" : "AI Short Drama Project";
-}
-
-function detectGenre(script: string, isZh: boolean) {
-  if (/校园|学生|school|campus/i.test(script)) return isZh ? "校园" : "Campus";
-  if (/古风|王爷|宫廷|ancient|costume/i.test(script)) return isZh ? "古风" : "Costume";
-  if (/霸总|总裁|ceo|boss/i.test(script)) return isZh ? "都市情感" : "Urban Romance";
-  if (/悬疑|杀人|mystery|crime/i.test(script)) return isZh ? "悬疑" : "Mystery";
-  return isZh ? "情感剧情" : "Drama";
-}
-
-function detectCharacters(script: string, isZh: boolean) {
-  const set = new Set<string>();
-
-  script.split("\n").forEach((line) => {
-    const trimmed = line.trim();
-    const colonMatch = trimmed.match(/^([^:：]{1,12})[:：]/);
-    if (colonMatch?.[1]) {
-      const name = colonMatch[1].trim();
-      if (name.length >= 1 && name.length <= 10) {
-        set.add(name);
-      }
-    }
-  });
-
-  const list = Array.from(set).slice(0, 6);
-  if (list.length > 0) return list;
-
-  return isZh ? ["主角", "女主", "关键配角"] : ["Lead", "Heroine", "Supporting Role"];
-}
-
-function buildStoryboard(script: string, isZh: boolean) {
-  const lines = script
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  if (lines.length === 0) {
-    return [
-      {
-        shot: 1,
-        title: isZh ? "开场镜头" : "Opening Shot",
-        desc: isZh ? "暂无剧本内容，等待生成。" : "No script content yet.",
-      },
-    ];
-  }
-
-  const blockSize = Math.max(Math.ceil(lines.length / 4), 1);
-  const items: StoryboardItem[] = [];
-
-  for (let i = 0; i < Math.min(4, lines.length); i++) {
-    const chunk = lines.slice(i * blockSize, (i + 1) * blockSize).join(" ");
-    if (!chunk) continue;
-
-    items.push({
-      shot: i + 1,
-      title: isZh ? `镜头 ${i + 1}` : `Shot ${i + 1}`,
-      desc: chunk.slice(0, 120),
-    });
-  }
-
-  return items.length > 0
-    ? items
-    : [
-        {
-          shot: 1,
-          title: isZh ? "开场镜头" : "Opening Shot",
-          desc: lines.slice(0, 3).join(" ").slice(0, 120),
-        },
-      ];
-}
-
-function buildStructuredResult(script: string, isZh: boolean): StructuredResultPayload {
-  const title = extractTitle(script, isZh);
-  const projectType = detectProjectType(script, isZh);
-  const genre = detectGenre(script, isZh);
-  const characters = detectCharacters(script, isZh);
-  const storyboard = buildStoryboard(script, isZh);
-
-  const summary = script.replace(/\s+/g, " ").trim().slice(0, 160);
-
-  const hook = isZh
-    ? `高能开场：${summary.slice(0, 36)}...`
-    : `Hook opening: ${summary.slice(0, 50)}...`;
-
-  const highlight = isZh
-    ? "节奏清晰，冲突明确，适合短剧和漫剧结构化生成。"
-    : "Clear pacing and conflict, suitable for short drama and comic generation.";
-
-  const spec = isZh ? "竖屏短剧 / 漫剧混合生产" : "Vertical short drama / comic hybrid production";
-
-  const aiTitle = isZh ? `${title} · AI增强版` : `${title} · AI Enhanced`;
-
-  const coverCopy = isZh
-    ? [
-        "她原以为这只是一次偶遇，没想到改变了整个命运",
-        "三秒入戏，十秒爆点，适合短剧封面传播",
-        "高冲突、高情绪、强转折的漫剧化表达",
-      ]
-    : [
-        "What seemed like a random encounter changed everything",
-        "Fast hook, strong conflict, perfect for short-form cover copy",
-        "High tension and emotional turns for comic-style video storytelling",
-      ];
-
-  return {
-    title,
-    aiTitle,
-    projectType,
-    genre,
-    spec,
-    highlight,
-    summary,
-    hook,
-    coverCopy,
-    characters,
-    storyboard,
-    script,
-  };
-}
-
 function cacheLegacyResult(payload: StructuredResultPayload) {
   localStorage.setItem("scriptText", payload.script);
   localStorage.setItem("parsedTitle", payload.title);
@@ -227,14 +84,25 @@ async function readTextFile(file: File) {
   return await file.text();
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function buildStepLogs(
   isZh: boolean,
   processingIndex: number,
   failedIndex?: number
 ): StepLogItem[] {
   const labels = isZh
-    ? ["创建任务", "读取剧本", "解析人物", "生成分镜", "整理结果", "写入任务结果"]
-    : ["Create Job", "Read Script", "Parse Characters", "Build Storyboard", "Prepare Output", "Save Result"];
+    ? ["创建任务", "读取剧本", "AI解析剧情", "AI识别角色", "AI生成分镜", "写入任务结果"]
+    : [
+        "Create Job",
+        "Read Script",
+        "AI Plot Analysis",
+        "AI Character Analysis",
+        "AI Storyboard Generation",
+        "Save Result",
+      ];
 
   return labels.map((label, index) => {
     let status: StepLogItem["status"] = "pending";
@@ -255,6 +123,67 @@ function buildStepLogs(
       updatedAt: new Date().toISOString(),
     };
   });
+}
+
+function extractFallbackTitle(script: string, isZh: boolean) {
+  const firstLine = script
+    .split("\n")
+    .map((line) => line.trim())
+    .find(Boolean);
+
+  if (!firstLine) {
+    return isZh ? "未命名项目" : "Untitled Project";
+  }
+
+  return firstLine.slice(0, 30);
+}
+
+function buildFallbackResult(script: string, isZh: boolean): StructuredResultPayload {
+  const title = extractFallbackTitle(script, isZh);
+
+  return {
+    title,
+    aiTitle: isZh ? `${title} · AI增强版` : `${title} · AI Enhanced`,
+    projectType: isZh ? "AI 短剧 / 漫剧项目" : "AI Drama / Comic Project",
+    genre: isZh ? "剧情" : "Drama",
+    spec: isZh ? "竖屏短剧 / 漫剧结构化输出" : "Vertical short drama / comic structured output",
+    highlight: isZh
+      ? "结构清晰，适合短剧与漫剧制作。"
+      : "Clear structure suitable for short drama and comic production.",
+    summary: script.replace(/\s+/g, " ").slice(0, 180),
+    hook: isZh
+      ? "高能开场，强冲突，适合短视频传播。"
+      : "Strong opening and conflict, suitable for short-form distribution.",
+    coverCopy: isZh
+      ? [
+          "三秒入戏，十秒爆点，适合短剧封面传播",
+          "高冲突高情绪，极具追更感",
+          "适合漫剧 / 短剧改编的强剧情内容",
+        ]
+      : [
+          "Fast hook and strong conflict for short-form distribution",
+          "High emotion with binge-worthy momentum",
+          "Strong story structure for drama and comic adaptation",
+        ],
+    characters: isZh ? ["主角", "女主", "关键配角"] : ["Lead", "Heroine", "Supporting Role"],
+    storyboard: [
+      {
+        shot: 1,
+        title: isZh ? "开场镜头" : "Opening Shot",
+        desc: isZh
+          ? "根据剧本内容自动生成的开场镜头。"
+          : "Auto-generated opening shot based on the script.",
+      },
+      {
+        shot: 2,
+        title: isZh ? "冲突推进" : "Conflict Development",
+        desc: isZh
+          ? "推动剧情发展的关键冲突镜头。"
+          : "A key conflict shot that pushes the plot forward.",
+      },
+    ],
+    script,
+  };
 }
 
 export default function GeneratePage() {
@@ -278,8 +207,15 @@ export default function GeneratePage() {
   const steps = useMemo(
     () =>
       isZh
-        ? ["创建任务", "读取剧本", "解析人物", "生成分镜", "整理结果", "写入任务结果"]
-        : ["Create Job", "Read Script", "Parse Characters", "Build Storyboard", "Prepare Output", "Save Result"],
+        ? ["创建任务", "读取剧本", "AI解析剧情", "AI识别角色", "AI生成分镜", "写入任务结果"]
+        : [
+            "Create Job",
+            "Read Script",
+            "AI Plot Analysis",
+            "AI Character Analysis",
+            "AI Storyboard Generation",
+            "Save Result",
+          ],
     [isZh]
   );
 
@@ -310,15 +246,6 @@ export default function GeneratePage() {
     const draft = loadDraftScript();
     if (draft.text) setScriptText(draft.text);
     if (draft.fileName) setLoadedFileName(draft.fileName);
-
-    await logActivity({
-      userId: user.id,
-      actorEmail: user.email,
-      actionType: "generate_page_opened",
-      targetType: "page",
-      targetId: "/generate",
-      message: "Opened generate page",
-    });
   }
 
   async function handleFileSelect(file: File) {
@@ -349,21 +276,6 @@ export default function GeneratePage() {
       setScriptText(text);
       setLoadedFileName(file.name);
       saveDraftScript(text, file.name);
-
-      if (profile?.id) {
-        await logActivity({
-          userId: profile.id,
-          actorEmail: profile.email,
-          actionType: "script_uploaded_on_generate_page",
-          targetType: "file",
-          targetId: file.name,
-          message: "Uploaded script file on generate page",
-          metadata: {
-            fileName: file.name,
-            size: file.size,
-          },
-        });
-      }
     } catch (error) {
       setErrorMessage(
         error instanceof Error
@@ -411,6 +323,11 @@ export default function GeneratePage() {
       return;
     }
 
+    if (profile?.status === "banned") {
+      setErrorMessage(isZh ? "你的账号当前已被封禁，无法继续生成。" : "Your account is banned and cannot generate now.");
+      return;
+    }
+
     setSubmitting(true);
     setErrorMessage("");
     setProgress(0);
@@ -418,14 +335,13 @@ export default function GeneratePage() {
 
     saveDraftScript(text, loadedFileName || undefined);
 
-    const payload = buildStructuredResult(text, isZh);
-    cacheLegacyResult(payload);
-
     let createdJobId = "";
 
     try {
+      const fallbackTitle = extractFallbackTitle(text, isZh);
+
       const { data, error } = await supabase.rpc("create_generation_job_and_consume_quota", {
-        target_script_title: payload.title,
+        target_script_title: fallbackTitle,
         target_source_script: text,
         target_quota_cost: 1,
       });
@@ -437,50 +353,59 @@ export default function GeneratePage() {
       createdJobId = data as string;
       setJobId(createdJobId);
 
-      if (profile?.id) {
-        await logActivity({
-          userId: profile.id,
-          actorEmail: profile.email,
-          actionType: "generation_started",
-          targetType: "generation_job",
-          targetId: createdJobId,
-          message: "Started a generation job",
-          metadata: {
-            scriptTitle: payload.title,
-            fileName: loadedFileName || null,
-          },
-        });
-      }
-
       const step0 = buildStepLogs(isZh, 0);
-      setProgress(8);
+      setProgress(10);
       setCurrentStep(0);
-      await updateJob(createdJobId, "processing", 8, null, null, null, step0);
-      await sleep(400);
+      await updateJob(createdJobId, "processing", 10, null, null, null, step0);
+      await sleep(300);
 
       const step1 = buildStepLogs(isZh, 1);
-      setProgress(18);
+      setProgress(20);
       setCurrentStep(1);
-      await updateJob(createdJobId, "processing", 18, null, null, null, step1);
-      await sleep(600);
+      await updateJob(createdJobId, "processing", 20, null, null, null, step1);
+      await sleep(300);
 
       const step2 = buildStepLogs(isZh, 2);
-      setProgress(36);
+      setProgress(35);
       setCurrentStep(2);
-      await updateJob(createdJobId, "processing", 36, null, null, null, step2);
-      await sleep(700);
+      await updateJob(createdJobId, "processing", 35, null, null, null, step2);
+
+      const analyzeRes = await fetch("/api/analyze-script", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          script: text,
+          locale,
+        }),
+      });
+
+      const analyzeData = await analyzeRes.json();
+
+      if (!analyzeRes.ok) {
+        throw new Error(
+          analyzeData?.error ||
+            (isZh ? "AI 解析失败，请稍后重试" : "AI analysis failed, please try again later")
+        );
+      }
+
+      const aiResult: StructuredResultPayload =
+        analyzeData?.result || buildFallbackResult(text, isZh);
+
+      cacheLegacyResult(aiResult);
 
       const step3 = buildStepLogs(isZh, 3);
-      setProgress(58);
+      setProgress(60);
       setCurrentStep(3);
-      await updateJob(createdJobId, "processing", 58, null, null, null, step3);
-      await sleep(700);
+      await updateJob(createdJobId, "processing", 60, null, null, null, step3);
+      await sleep(250);
 
       const step4 = buildStepLogs(isZh, 4);
-      setProgress(78);
+      setProgress(82);
       setCurrentStep(4);
-      await updateJob(createdJobId, "processing", 78, null, null, null, step4);
-      await sleep(700);
+      await updateJob(createdJobId, "processing", 82, null, null, null, step4);
+      await sleep(250);
 
       const resultUrl = `/${locale}/result?job=${createdJobId}`;
       const step5 = buildStepLogs(isZh, 6);
@@ -488,21 +413,7 @@ export default function GeneratePage() {
       setProgress(100);
       setCurrentStep(5);
 
-      await updateJob(createdJobId, "success", 100, resultUrl, null, payload, step5);
-
-      if (profile?.id) {
-        await logActivity({
-          userId: profile.id,
-          actorEmail: profile.email,
-          actionType: "generation_succeeded",
-          targetType: "generation_job",
-          targetId: createdJobId,
-          message: "Generation job completed successfully",
-          metadata: {
-            resultUrl,
-          },
-        });
-      }
+      await updateJob(createdJobId, "success", 100, resultUrl, null, aiResult, step5);
 
       router.push(resultUrl);
     } catch (error) {
@@ -518,17 +429,6 @@ export default function GeneratePage() {
       if (createdJobId) {
         const failedSteps = buildStepLogs(isZh, 0, Math.max(currentStep, 0));
         await updateJob(createdJobId, "failed", progress || 0, null, message, null, failedSteps);
-      }
-
-      if (profile?.id) {
-        await logActivity({
-          userId: profile.id,
-          actorEmail: profile.email,
-          actionType: "generation_failed",
-          targetType: "generation_job",
-          targetId: createdJobId || null,
-          message,
-        });
       }
     } finally {
       setSubmitting(false);
@@ -583,17 +483,17 @@ export default function GeneratePage() {
       <section className="mx-auto max-w-6xl px-6 py-14">
         <div className="mb-8">
           <div className="mb-4 inline-flex rounded-full border border-emerald-400/20 bg-emerald-400/10 px-4 py-1 text-xs text-emerald-300">
-            {isZh ? "第二阶段：任务驱动生成" : "Phase 2: Job-driven generation"}
+            {isZh ? "第三阶段：AI 剧本解析" : "Phase 3: AI Script Analysis"}
           </div>
 
           <h1 className="text-4xl font-bold">
-            {isZh ? "上传剧本并创建生成任务" : "Upload Script and Create Generation Job"}
+            {isZh ? "上传剧本并交给 AI 解析" : "Upload Script and Let AI Analyze It"}
           </h1>
 
           <p className="mt-3 text-zinc-400">
             {isZh
-              ? "首页带过来的剧本会自动显示在这里。你也可以继续编辑，或者重新上传 txt / md 文本文件。"
-              : "The script from the homepage is automatically loaded here. You can continue editing or re-upload a text file."}
+              ? "首页带过来的剧本会自动显示在这里。你可以继续编辑，或者重新上传 txt / md 文本文件。点击开始生成后，系统会调用 AI 生成结构化结果。"
+              : "The script from the homepage is automatically loaded here. You can continue editing or re-upload a text file. When you start generation, the system calls AI to create structured output."}
           </p>
 
           <div className="mt-4 text-sm text-zinc-500">{quotaText}</div>
@@ -687,8 +587,8 @@ export default function GeneratePage() {
               >
                 {submitting
                   ? isZh
-                    ? "生成中..."
-                    : "Generating..."
+                    ? "AI 解析中..."
+                    : "AI Analyzing..."
                   : isZh
                   ? "开始生成"
                   : "Start Generating"}
@@ -767,8 +667,8 @@ export default function GeneratePage() {
 
             <div className="mt-6 rounded-2xl bg-zinc-950 p-4 text-sm text-zinc-400">
               {isZh
-                ? "说明：首页上传的剧本会自动带到这里。后续接入真实 AI 模型时，只需要替换中间生成逻辑。"
-                : "The homepage script is automatically loaded here. Later you only need to replace the middle generation logic with real AI services."}
+                ? "这一版已经接入真实 AI 文本解析。生成成功后，系统会把结构化结果写入任务，并跳转到结果页。"
+                : "This version uses real AI text analysis. After success, the structured result is saved into the job and opens the result page."}
             </div>
           </div>
         </div>
