@@ -13,9 +13,8 @@ type ProfileRow = {
   monthly_quota: number;
   used_count: number;
   status: string;
-  note?: string;
-  user_tag?: string;
   updated_at: string;
+  admin_note?: string | null;
 };
 
 type GenerationRow = {
@@ -171,7 +170,6 @@ export default function AdminPage() {
           ? {
               ...item,
               status: nextStatus,
-              user_tag: nextStatus === "banned" ? "blacklist" : item.user_tag,
               updated_at: new Date().toISOString(),
             }
           : item
@@ -283,6 +281,83 @@ export default function AdminPage() {
     setDeletingId("");
   }
 
+  function escapeCsvValue(value: unknown) {
+    const text = String(value ?? "");
+    if (text.includes(",") || text.includes('"') || text.includes("\n")) {
+      return `"${text.replace(/"/g, '""')}"`;
+    }
+    return text;
+  }
+
+  function downloadCsv(filename: string, headers: string[], rows: (string | number | null | undefined)[][]) {
+    const csv = [
+      headers.map(escapeCsvValue).join(","),
+      ...rows.map((row) => row.map(escapeCsvValue).join(",")),
+    ].join("\n");
+
+    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportUsersCsv() {
+    downloadCsv(
+      "users.csv",
+      ["id", "email", "plan", "monthly_quota", "used_count", "status", "admin_note", "updated_at"],
+      filteredProfiles.map((item) => [
+        item.id,
+        item.email,
+        item.plan,
+        item.monthly_quota,
+        item.used_count,
+        item.status,
+        item.admin_note || "",
+        item.updated_at,
+      ])
+    );
+    setActionMessage(isZh ? "用户数据已导出 CSV" : "Users exported to CSV");
+  }
+
+  function exportOrdersCsv() {
+    downloadCsv(
+      "orders.csv",
+      ["id", "user_id", "email", "plan", "amount", "payment_method", "status", "created_at"],
+      filteredOrders.map((item) => [
+        item.id,
+        item.user_id,
+        item.email,
+        item.plan,
+        item.amount,
+        item.payment_method,
+        item.status,
+        item.created_at,
+      ])
+    );
+    setActionMessage(isZh ? "订单数据已导出 CSV" : "Orders exported to CSV");
+  }
+
+  function exportGenerationsCsv() {
+    downloadCsv(
+      "generations.csv",
+      ["id", "user_id", "email", "file_name", "plan", "quota_cost", "status", "created_at"],
+      filteredGenerations.map((item) => [
+        item.id,
+        item.user_id,
+        item.email,
+        item.file_name,
+        item.plan,
+        item.quota_cost,
+        item.status,
+        item.created_at,
+      ])
+    );
+    setActionMessage(isZh ? "生成记录已导出 CSV" : "Generations exported to CSV");
+  }
+
   const totalUsers = profiles.length;
   const totalGenerations = generations.length;
   const paidUsers = profiles.filter((item) => item.plan !== "free").length;
@@ -304,39 +379,22 @@ export default function AdminPage() {
 
   const formatMoney = useMemo(
     () => (amount: number) => {
-      if (isZh) {
-        return `¥${(amount / 100).toFixed(2)}`;
-      }
+      if (isZh) return `¥${(amount / 100).toFixed(2)}`;
       return `$${(amount / 100).toFixed(2)}`;
     },
     [isZh]
   );
 
   const formatTime = useMemo(
-    () => (value: string) => {
-      return new Date(value).toLocaleString();
-    },
+    () => (value: string) => new Date(value).toLocaleString(),
     []
   );
 
   const formatStatus = useMemo(
     () => (status: string) => {
-      if (status === "banned") {
-        return isZh ? "已封禁" : "Banned";
-      }
-      if (status === "active") {
-        return isZh ? "已生效" : "Active";
-      }
+      if (status === "banned") return isZh ? "已封禁" : "Banned";
+      if (status === "active") return isZh ? "已生效" : "Active";
       return status;
-    },
-    [isZh]
-  );
-
-  const formatTag = useMemo(
-    () => (tag?: string) => {
-      if (tag === "whitelist") return isZh ? "白名单" : "Whitelist";
-      if (tag === "blacklist") return isZh ? "黑名单" : "Blacklist";
-      return isZh ? "普通" : "Normal";
     },
     [isZh]
   );
@@ -347,8 +405,8 @@ export default function AdminPage() {
     const matchesSearch =
       !normalizedSearch ||
       (item.email || "").toLowerCase().includes(normalizedSearch) ||
-      (item.note || "").toLowerCase().includes(normalizedSearch) ||
-      item.id.toLowerCase().includes(normalizedSearch);
+      item.id.toLowerCase().includes(normalizedSearch) ||
+      (item.admin_note || "").toLowerCase().includes(normalizedSearch);
 
     const matchesPlan = planFilter === "all" || item.plan === planFilter;
     return matchesSearch && matchesPlan;
@@ -385,9 +443,7 @@ export default function AdminPage() {
     );
   }
 
-  if (!allowed) {
-    return null;
-  }
+  if (!allowed) return null;
 
   return (
     <main className="min-h-screen bg-zinc-950 text-white">
@@ -401,6 +457,12 @@ export default function AdminPage() {
           </div>
 
           <div className="flex items-center gap-3">
+            <Link
+              href={`/${locale}/admin/blacklist`}
+              className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-300"
+            >
+              {isZh ? "邮箱黑名单" : "Email Blacklist"}
+            </Link>
             <Link
               href={`/${locale}/account`}
               className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-300 transition hover:bg-white/5"
@@ -424,8 +486,8 @@ export default function AdminPage() {
 
           <p className="mt-3 text-zinc-400">
             {isZh
-              ? "查看全站用户、订单、生成情况，并支持搜索、筛选、改套餐、补单、封禁、删除测试数据和标签备注管理。"
-              : "Review platform users, orders, and generations with search, filters, plan edits, grants, bans, cleanup tools, and tag/note management."}
+              ? "查看全站用户、订单、生成情况，并支持搜索、筛选、改套餐、补单、封禁、数据清理和 CSV 导出。"
+              : "Review platform users, orders, and generations with search, filters, plan edits, grants, bans, cleanup tools, and CSV export."}
           </p>
         </div>
 
@@ -434,17 +496,14 @@ export default function AdminPage() {
             <div className="text-sm text-zinc-400">{isZh ? "总用户数" : "Total Users"}</div>
             <div className="mt-3 text-4xl font-bold">{totalUsers}</div>
           </div>
-
           <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6">
             <div className="text-sm text-zinc-400">{isZh ? "总生成次数" : "Total Generations"}</div>
             <div className="mt-3 text-4xl font-bold">{totalGenerations}</div>
           </div>
-
           <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6">
             <div className="text-sm text-zinc-400">{isZh ? "付费用户数" : "Paid Users"}</div>
             <div className="mt-3 text-4xl font-bold">{paidUsers}</div>
           </div>
-
           <div className="rounded-3xl border border-white/10 bg-zinc-900 p-6">
             <div className="text-sm text-zinc-400">{isZh ? "累计收入" : "Total Revenue"}</div>
             <div className="mt-3 text-4xl font-bold">{formatMoney(totalRevenue)}</div>
@@ -452,7 +511,7 @@ export default function AdminPage() {
         </div>
 
         <div className="mt-8 rounded-3xl border border-white/10 bg-zinc-900 p-4">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => setActiveTab("overview")}
@@ -506,11 +565,11 @@ export default function AdminPage() {
               </button>
             </div>
 
-            <div className="flex flex-col gap-3 md:flex-row">
+            <div className="flex flex-col gap-3 xl:flex-row">
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder={isZh ? "搜索邮箱 / 文件名 / 备注 / ID" : "Search email / file / note / ID"}
+                placeholder={isZh ? "搜索邮箱 / 文件名 / ID / 备注" : "Search email / file / ID / note"}
                 className="h-10 rounded-xl border border-white/10 bg-zinc-950 px-4 text-sm text-white outline-none placeholder:text-zinc-500"
               />
               <select
@@ -524,6 +583,27 @@ export default function AdminPage() {
                 <option value="studio">Studio</option>
               </select>
             </div>
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              onClick={exportUsersCsv}
+              className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-200"
+            >
+              {isZh ? "导出用户 CSV" : "Export Users CSV"}
+            </button>
+            <button
+              onClick={exportOrdersCsv}
+              className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-200"
+            >
+              {isZh ? "导出订单 CSV" : "Export Orders CSV"}
+            </button>
+            <button
+              onClick={exportGenerationsCsv}
+              className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-200"
+            >
+              {isZh ? "导出生成记录 CSV" : "Export Generations CSV"}
+            </button>
           </div>
 
           {actionMessage && (
@@ -553,21 +633,12 @@ export default function AdminPage() {
                           <div className="font-medium">
                             {item.file_name || (isZh ? "未命名文件" : "Untitled file")}
                           </div>
-                          <div className="mt-1 text-xs text-zinc-500">
-                            {item.email || "-"}
-                          </div>
+                          <div className="mt-1 text-xs text-zinc-500">{item.email || "-"}</div>
                         </div>
-
                         <div className="flex flex-wrap gap-2 text-xs">
-                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
-                            {formatPlan(item.plan)}
-                          </div>
-                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
-                            {isZh ? "消耗" : "Cost"}: {item.quota_cost}
-                          </div>
-                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
-                            {formatTime(item.created_at)}
-                          </div>
+                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{formatPlan(item.plan)}</div>
+                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{isZh ? "消耗" : "Cost"}: {item.quota_cost}</div>
+                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{formatTime(item.created_at)}</div>
                         </div>
                       </div>
                     </div>
@@ -592,21 +663,12 @@ export default function AdminPage() {
                       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                         <div>
                           <div className="font-medium">{formatPlan(item.plan)}</div>
-                          <div className="mt-1 text-xs text-zinc-500">
-                            {item.email || "-"}
-                          </div>
+                          <div className="mt-1 text-xs text-zinc-500">{item.email || "-"}</div>
                         </div>
-
                         <div className="flex flex-wrap gap-2 text-xs">
-                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
-                            {formatMoney(item.amount)}
-                          </div>
-                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
-                            {item.status}
-                          </div>
-                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
-                            {formatTime(item.created_at)}
-                          </div>
+                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{formatMoney(item.amount)}</div>
+                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{item.status}</div>
+                          <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{formatTime(item.created_at)}</div>
                         </div>
                       </div>
                     </div>
@@ -619,64 +681,34 @@ export default function AdminPage() {
 
         {activeTab === "users" && (
           <div className="mt-8 rounded-3xl border border-white/10 bg-zinc-900 p-6">
-            <div className="mb-4 text-xl font-semibold">
-              {isZh ? "用户列表" : "User List"}
-            </div>
-
+            <div className="mb-4 text-xl font-semibold">{isZh ? "用户列表" : "User List"}</div>
             <div className="space-y-4">
               {filteredProfiles.length === 0 ? (
-                <div className="rounded-2xl bg-zinc-950 p-6 text-zinc-400">
-                  {isZh ? "没有匹配用户" : "No matching users"}
-                </div>
+                <div className="rounded-2xl bg-zinc-950 p-6 text-zinc-400">{isZh ? "没有匹配用户" : "No matching users"}</div>
               ) : (
                 filteredProfiles.map((item) => (
                   <div key={item.id} className="rounded-2xl bg-zinc-950 p-4">
-                    <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                    <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                       <div className="min-w-0">
                         <div className="font-medium">{item.email || "-"}</div>
                         <div className="mt-1 text-xs text-zinc-500">{item.id}</div>
-                        {item.note && (
-                          <div className="mt-2 text-sm text-zinc-400">
-                            {isZh ? "备注：" : "Note: "} {item.note}
+                        {item.admin_note && (
+                          <div className="mt-2 rounded-xl bg-zinc-900 px-3 py-2 text-xs text-zinc-300">
+                            {isZh ? "备注：" : "Note: "} {item.admin_note}
                           </div>
                         )}
                       </div>
 
                       <div className="flex flex-wrap gap-2 text-xs">
-                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
-                          {formatPlan(item.plan)}
-                        </div>
+                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{formatPlan(item.plan)}</div>
                         <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
                           {isZh ? "额度" : "Quota"}:{" "}
-                          {item.plan === "studio"
-                            ? isZh
-                              ? "无限"
-                              : "Unlimited"
-                            : `${item.used_count} / ${item.monthly_quota}`}
+                          {item.plan === "studio" ? (isZh ? "无限" : "Unlimited") : `${item.used_count} / ${item.monthly_quota}`}
                         </div>
-                        <div
-                          className={`rounded-full border px-3 py-1 ${
-                            item.status === "banned"
-                              ? "border-red-500/30 text-red-300"
-                              : "border-white/10 text-zinc-300"
-                          }`}
-                        >
+                        <div className={`rounded-full border px-3 py-1 ${item.status === "banned" ? "border-red-500/30 text-red-300" : "border-white/10 text-zinc-300"}`}>
                           {formatStatus(item.status)}
                         </div>
-                        <div
-                          className={`rounded-full border px-3 py-1 ${
-                            item.user_tag === "whitelist"
-                              ? "border-blue-500/30 text-blue-300"
-                              : item.user_tag === "blacklist"
-                              ? "border-red-500/30 text-red-300"
-                              : "border-white/10 text-zinc-300"
-                          }`}
-                        >
-                          {formatTag(item.user_tag)}
-                        </div>
-                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
-                          {formatTime(item.updated_at)}
-                        </div>
+                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{formatTime(item.updated_at)}</div>
                       </div>
                     </div>
 
@@ -735,15 +767,10 @@ export default function AdminPage() {
 
         {activeTab === "orders" && (
           <div className="mt-8 rounded-3xl border border-white/10 bg-zinc-900 p-6">
-            <div className="mb-4 text-xl font-semibold">
-              {isZh ? "订单列表" : "Order List"}
-            </div>
-
+            <div className="mb-4 text-xl font-semibold">{isZh ? "订单列表" : "Order List"}</div>
             <div className="space-y-4">
               {filteredOrders.length === 0 ? (
-                <div className="rounded-2xl bg-zinc-950 p-6 text-zinc-400">
-                  {isZh ? "没有匹配订单" : "No matching orders"}
-                </div>
+                <div className="rounded-2xl bg-zinc-950 p-6 text-zinc-400">{isZh ? "没有匹配订单" : "No matching orders"}</div>
               ) : (
                 filteredOrders.map((item) => (
                   <div key={item.id} className="rounded-2xl bg-zinc-950 p-4">
@@ -752,23 +779,12 @@ export default function AdminPage() {
                         <div className="font-medium">{item.email || "-"}</div>
                         <div className="mt-1 text-xs text-zinc-500">{item.id}</div>
                       </div>
-
                       <div className="flex flex-wrap gap-2 text-xs">
-                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
-                          {formatPlan(item.plan)}
-                        </div>
-                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
-                          {formatMoney(item.amount)}
-                        </div>
-                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
-                          {item.payment_method}
-                        </div>
-                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
-                          {item.status}
-                        </div>
-                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
-                          {formatTime(item.created_at)}
-                        </div>
+                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{formatPlan(item.plan)}</div>
+                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{formatMoney(item.amount)}</div>
+                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{item.payment_method}</div>
+                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{item.status}</div>
+                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{formatTime(item.created_at)}</div>
                       </div>
                     </div>
 
@@ -790,41 +806,24 @@ export default function AdminPage() {
 
         {activeTab === "generations" && (
           <div className="mt-8 rounded-3xl border border-white/10 bg-zinc-900 p-6">
-            <div className="mb-4 text-xl font-semibold">
-              {isZh ? "生成记录列表" : "Generation List"}
-            </div>
-
+            <div className="mb-4 text-xl font-semibold">{isZh ? "生成记录列表" : "Generation List"}</div>
             <div className="space-y-4">
               {filteredGenerations.length === 0 ? (
-                <div className="rounded-2xl bg-zinc-950 p-6 text-zinc-400">
-                  {isZh ? "没有匹配生成记录" : "No matching generation records"}
-                </div>
+                <div className="rounded-2xl bg-zinc-950 p-6 text-zinc-400">{isZh ? "没有匹配生成记录" : "No matching generation records"}</div>
               ) : (
                 filteredGenerations.map((item) => (
                   <div key={item.id} className="rounded-2xl bg-zinc-950 p-4">
                     <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                       <div>
-                        <div className="font-medium">
-                          {item.file_name || (isZh ? "未命名文件" : "Untitled file")}
-                        </div>
-                        <div className="mt-1 text-xs text-zinc-500">
-                          {item.email || "-"} · {item.id}
-                        </div>
+                        <div className="font-medium">{item.file_name || (isZh ? "未命名文件" : "Untitled file")}</div>
+                        <div className="mt-1 text-xs text-zinc-500">{item.email || "-"} · {item.id}</div>
                       </div>
 
                       <div className="flex flex-wrap gap-2 text-xs">
-                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
-                          {formatPlan(item.plan)}
-                        </div>
-                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
-                          {isZh ? "消耗" : "Cost"}: {item.quota_cost}
-                        </div>
-                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
-                          {item.status}
-                        </div>
-                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
-                          {formatTime(item.created_at)}
-                        </div>
+                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{formatPlan(item.plan)}</div>
+                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{isZh ? "消耗" : "Cost"}: {item.quota_cost}</div>
+                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{item.status}</div>
+                        <div className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">{formatTime(item.created_at)}</div>
                       </div>
                     </div>
 
@@ -846,15 +845,11 @@ export default function AdminPage() {
 
         {activeTab === "grant" && (
           <div className="mt-8 rounded-3xl border border-white/10 bg-zinc-900 p-6">
-            <div className="mb-4 text-xl font-semibold">
-              {isZh ? "手动补单 / 赠送套餐" : "Manual Grant / Gift Plan"}
-            </div>
+            <div className="mb-4 text-xl font-semibold">{isZh ? "手动补单 / 赠送套餐" : "Manual Grant / Gift Plan"}</div>
 
             <div className="grid gap-4 md:grid-cols-2">
               <div className="rounded-2xl bg-zinc-950 p-5">
-                <label className="mb-2 block text-sm text-zinc-400">
-                  {isZh ? "用户邮箱" : "User Email"}
-                </label>
+                <label className="mb-2 block text-sm text-zinc-400">{isZh ? "用户邮箱" : "User Email"}</label>
                 <input
                   value={grantEmail}
                   onChange={(e) => setGrantEmail(e.target.value)}
@@ -864,9 +859,7 @@ export default function AdminPage() {
               </div>
 
               <div className="rounded-2xl bg-zinc-950 p-5">
-                <label className="mb-2 block text-sm text-zinc-400">
-                  {isZh ? "套餐类型" : "Plan Type"}
-                </label>
+                <label className="mb-2 block text-sm text-zinc-400">{isZh ? "套餐类型" : "Plan Type"}</label>
                 <select
                   value={grantPlan}
                   onChange={(e) => setGrantPlan(e.target.value as "free" | "pro" | "studio")}
@@ -879,9 +872,7 @@ export default function AdminPage() {
               </div>
 
               <div className="rounded-2xl bg-zinc-950 p-5">
-                <label className="mb-2 block text-sm text-zinc-400">
-                  {isZh ? "订单金额（分）" : "Order Amount (cents)"}
-                </label>
+                <label className="mb-2 block text-sm text-zinc-400">{isZh ? "订单金额（分）" : "Order Amount (cents)"}</label>
                 <input
                   value={grantAmount}
                   onChange={(e) => setGrantAmount(e.target.value)}
@@ -891,9 +882,7 @@ export default function AdminPage() {
               </div>
 
               <div className="rounded-2xl bg-zinc-950 p-5">
-                <label className="mb-2 block text-sm text-zinc-400">
-                  {isZh ? "支付方式标记" : "Payment Method Label"}
-                </label>
+                <label className="mb-2 block text-sm text-zinc-400">{isZh ? "支付方式标记" : "Payment Method Label"}</label>
                 <input
                   value={grantMethod}
                   onChange={(e) => setGrantMethod(e.target.value)}
@@ -916,12 +905,8 @@ export default function AdminPage() {
                 className="rounded-xl bg-emerald-400 px-6 py-3 text-sm font-semibold text-black disabled:opacity-50"
               >
                 {grantLoading
-                  ? isZh
-                    ? "处理中..."
-                    : "Processing..."
-                  : isZh
-                  ? "确认补单 / 开通套餐"
-                  : "Grant Plan Now"}
+                  ? isZh ? "处理中..." : "Processing..."
+                  : isZh ? "确认补单 / 开通套餐" : "Grant Plan Now"}
               </button>
             </div>
           </div>
