@@ -13,10 +13,7 @@ export function getOptionalEnv(name: string, fallback = "") {
   return value && value.trim() ? value.trim() : fallback;
 }
 
-export function getOptionalNumberEnv(name: string, fallback: number) {
-  const raw = process.env[name];
-  if (!raw || !raw.trim()) return fallback;
-
-  const value = Number(raw);
-  return Number.isFinite(value) ? value : fallback;
+export function hasEnv(name: string) {
+  const value = process.env[name];
+  return Boolean(value && value.trim());
 }
