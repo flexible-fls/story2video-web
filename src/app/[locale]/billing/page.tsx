@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { usePathname } from "next/navigation";
+import { useEffect, useState, useMemo } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import LanguageSwitch from "@/components/LanguageSwitch";
 import BackButton from "@/components/BackButton";
 import { supabase } from "@/lib/supabase";
@@ -17,17 +17,31 @@ type ProfileRow = {
   status: string;
 };
 
+function getStatusText(status?: string, isZh?: boolean) {
+  if (status === "banned") return isZh ? "已封禁" : "Banned";
+  return isZh ? "正常" : "Active";
+}
+
+function getStatusStyle(status?: string) {
+  if (status === "banned") {
+    return "border-red-500/20 bg-red-500/10 text-red-300";
+  }
+
+  return "border-emerald-400/20 bg-emerald-400/10 text-emerald-300";
+}
+
 export default function BillingPage() {
   const pathname = usePathname();
+  const router = useRouter();
   const locale = pathname.startsWith("/en") ? "en" : "zh";
   const isZh = locale === "zh";
 
   const [profile, setProfile] = useState<ProfileRow | null>(null);
-  const [isAuthed, setIsAuthed] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [signingOut, setSigningOut] = useState(false);
 
   useEffect(() => {
-    bootstrap();
+    void bootstrap();
   }, [locale]);
 
   async function bootstrap() {
@@ -38,13 +52,9 @@ export default function BillingPage() {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      setIsAuthed(false);
-      setProfile(null);
-      setLoading(false);
+      router.push(`/${locale}/auth`);
       return;
     }
-
-    setIsAuthed(true);
 
     const { data } = await supabase
       .from("profiles")
@@ -59,53 +69,51 @@ export default function BillingPage() {
     setLoading(false);
   }
 
+  async function handleSignOut() {
+    setSigningOut(true);
+    await supabase.auth.signOut();
+    setSigningOut(false);
+    router.push(`/${locale}/auth`);
+  }
+
   const currentPlan = useMemo(() => getPlanByKey(profile?.plan), [profile?.plan]);
 
-  function renderAction(planKey: string) {
-    const isCurrent = profile?.plan === planKey;
+  const quotaUsed = profile?.used_count ?? 0;
+  const quotaTotal = profile?.monthly_quota ?? 0;
+  const isStudio = profile?.plan === "studio";
+  const quotaPercent =
+    !isStudio && quotaTotal > 0
+      ? Math.max(0, Math.min(100, Math.round((quotaUsed / quotaTotal) * 100)))
+      : 100;
 
-    if (!isAuthed) {
-      return (
-        <Link
-          href={`/${locale}/auth`}
-          className={`mt-8 block rounded-2xl px-6 py-3 text-center text-sm transition ${
-            planKey === "pro"
-              ? "bg-emerald-400 font-semibold text-black hover:bg-emerald-300"
-              : "border border-white/10 bg-white/[0.03] text-zinc-200 hover:bg-white/[0.07]"
-          }`}
-        >
-          {isZh ? "登录后选择" : "Login to Choose"}
-        </Link>
-      );
-    }
-
-    if (isCurrent) {
-      return (
-        <div className="mt-8 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-6 py-3 text-center text-sm font-medium text-emerald-300">
-          {isZh ? "当前套餐" : "Current Plan"}
-        </div>
-      );
-    }
-
-    return (
-      <Link
-        href={`/${locale}/account`}
-        className={`mt-8 block rounded-2xl px-6 py-3 text-center text-sm transition ${
-          planKey === "pro"
-            ? "bg-emerald-400 font-semibold text-black hover:bg-emerald-300"
-            : "border border-white/10 bg-white/[0.03] text-zinc-200 hover:bg-white/[0.07]"
-        }`}
-      >
-        {isZh ? "去账户中心升级" : "Upgrade in Account Center"}
-      </Link>
-    );
-  }
+  const summaryCards = [
+    {
+      label: isZh ? "当前套餐" : "Current Plan",
+      value: currentPlan.name,
+      sub: isZh ? "与账户页面保持一致" : "Synced with account page",
+    },
+    {
+      label: isZh ? "账户状态" : "Account Status",
+      value: getStatusText(profile?.status, isZh),
+      sub: isZh ? "决定是否允许继续生成" : "Controls generation availability",
+    },
+    {
+      label: isZh ? "已用额度" : "Used Quota",
+      value: isStudio ? (isZh ? "无限" : "Unlimited") : `${quotaUsed}`,
+      sub: isZh ? "按当前套餐统计" : "Measured under current plan",
+    },
+    {
+      label: isZh ? "总额度" : "Total Quota",
+      value: isStudio ? (isZh ? "无限" : "Unlimited") : `${quotaTotal}`,
+      sub: isZh ? "月度额度上限" : "Monthly quota cap",
+    },
+  ];
 
   if (loading) {
     return (
       <main className="min-h-screen bg-[#06070a] text-white">
         <div className="flex min-h-screen items-center justify-center text-zinc-400">
-          {isZh ? "套餐信息加载中..." : "Loading pricing..."}
+          {isZh ? "账单加载中..." : "Loading billing..."}
         </div>
       </main>
     );
@@ -113,153 +121,226 @@ export default function BillingPage() {
 
   return (
     <main className="min-h-screen bg-[#06070a] text-white">
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute left-[-120px] top-[100px] h-[320px] w-[320px] rounded-full bg-emerald-500/10 blur-3xl" />
+      <div className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div className="absolute left-[-140px] top-[100px] h-[340px] w-[340px] rounded-full bg-emerald-500/10 blur-3xl" />
         <div className="absolute right-[-120px] top-[220px] h-[360px] w-[360px] rounded-full bg-cyan-500/10 blur-3xl" />
       </div>
 
       <header className="sticky top-0 z-30 border-b border-white/10 bg-[#06070a]/80 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-6 py-4 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-3">
             <BackButton fallbackHref={`/${locale}`} />
             <div>
-              <div className="text-xl font-semibold tracking-tight">FulushouVideo</div>
+              <div className="text-xl font-semibold tracking-tight text-white">
+                FulushouVideo
+              </div>
               <div className="text-xs text-zinc-400">
-                {isZh ? "套餐与额度" : "Pricing & Quotas"}
+                {isZh ? "套餐与账单" : "Plans & Billing"}
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <Link
+              href={`/${locale}/jobs`}
+              className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-zinc-200 transition hover:bg-white/[0.07]"
+            >
+              {isZh ? "任务中心" : "Jobs"}
+            </Link>
+
             <Link
               href={`/${locale}/account`}
-              className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-zinc-200"
+              className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-4 py-2 text-sm text-emerald-300 transition hover:bg-emerald-400/15"
             >
-              {isZh ? "账户中心" : "Account"}
+              {isZh ? "账户中心" : "Account Center"}
             </Link>
+
+            <button
+              type="button"
+              onClick={handleSignOut}
+              disabled={signingOut}
+              className="rounded-full border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm text-red-300 transition hover:bg-red-500/15 disabled:opacity-50"
+            >
+              {signingOut
+                ? isZh
+                  ? "退出中..."
+                  : "Signing out..."
+                : isZh
+                ? "退出登录"
+                : "Sign Out"}
+            </button>
+
             <LanguageSwitch locale={locale} />
           </div>
         </div>
       </header>
 
-      <section className="mx-auto max-w-7xl px-6 pb-12 pt-16">
-        <div className="text-center">
-          <div className="inline-flex rounded-full border border-emerald-400/20 bg-emerald-400/10 px-4 py-1 text-xs text-emerald-300">
-            {isZh ? "统一套餐配置" : "Unified Pricing Source"}
-          </div>
+      <section className="relative mx-auto max-w-7xl px-6 pb-8 pt-14">
+        <div className="grid gap-8 xl:grid-cols-[1.05fr_0.95fr]">
+          <div>
+            <div className="mb-5 inline-flex items-center rounded-full border border-emerald-400/20 bg-emerald-400/10 px-4 py-1 text-xs font-medium text-emerald-300">
+              {isZh ? "账单页面 / SaaS 化升级" : "Billing Page / SaaS Upgrade"}
+            </div>
 
-          <h1 className="mt-5 text-5xl font-bold tracking-tight text-white md:text-6xl">
-            {isZh ? "选择适合你的内容生产方案" : "Choose the plan that fits your workflow"}
-          </h1>
+            <h1 className="max-w-4xl text-4xl font-bold leading-[1.05] tracking-tight text-white md:text-6xl">
+              {isZh ? "查看套餐与升级选项" : "Review Plans and Upgrade Options"}
+            </h1>
 
-          <p className="mx-auto mt-6 max-w-3xl text-base leading-8 text-zinc-300 md:text-lg">
-            {isZh
-              ? "billing 页面、首页和账户中心现在使用同一份套餐配置。以后你只需要改一处。"
-              : "The billing page, homepage, and account center now use the same pricing source. Update once, sync everywhere."}
-          </p>
-        </div>
+            <p className="mt-6 max-w-2xl text-base leading-8 text-zinc-300 md:text-lg">
+              {isZh
+                ? "Billing 页面展示了你当前的套餐与额度使用情况，提供了清晰的升级路径与套餐对比。"
+                : "The Billing page displays your current plan and quota usage, with clear upgrade paths and plan comparisons."}
+            </p>
 
-        {isAuthed && profile ? (
-          <div className="mx-auto mt-10 max-w-4xl rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-7">
-            <div className="grid gap-4 md:grid-cols-3">
-              <div className="rounded-[24px] border border-white/8 bg-black/25 p-5">
-                <div className="text-sm text-zinc-400">{isZh ? "当前套餐" : "Current Plan"}</div>
-                <div className="mt-3 text-2xl font-bold text-white">{currentPlan.name}</div>
-              </div>
+            <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              {summaryCards.map((card) => (
+                <div
+                  key={card.label}
+                  className="rounded-[28px] border border-white/10 bg-gradient-to-b from-white/[0.06] to-white/[0.03] p-5"
+                >
+                  <div className="text-sm text-zinc-400">{card.label}</div>
+                  <div className="mt-3 text-2xl font-bold text-white">{card.value}</div>
+                  <div className="mt-2 text-xs leading-6 text-zinc-500">{card.sub}</div>
+                </div>
+              ))}
+            </div>
 
-              <div className="rounded-[24px] border border-white/8 bg-black/25 p-5">
-                <div className="text-sm text-zinc-400">{isZh ? "账户邮箱" : "Account Email"}</div>
-                <div className="mt-3 truncate text-base text-white">{profile.email || "-"}</div>
-              </div>
+            <div className="mt-8 rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-6">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <div className="text-sm text-zinc-400">{isZh ? "账户邮箱" : "Account Email"}</div>
+                  <div className="mt-2 break-all text-lg font-medium text-white">
+                    {profile?.email || "-"}
+                  </div>
 
-              <div className="rounded-[24px] border border-white/8 bg-black/25 p-5">
-                <div className="text-sm text-zinc-400">{isZh ? "当前额度" : "Current Quota"}</div>
-                <div className="mt-3 text-base text-white">
-                  {profile.plan === "studio"
-                    ? isZh
-                      ? "无限"
-                      : "Unlimited"
-                    : `${profile.used_count} / ${profile.monthly_quota}`}
+                  <div
+                    className={`mt-4 inline-flex rounded-full border px-3 py-1 text-xs ${getStatusStyle(
+                      profile?.status
+                    )}`}
+                  >
+                    {getStatusText(profile?.status, isZh)}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-3">
+                  <Link
+                    href={`/${locale}/generate`}
+                    className="rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-3 text-sm text-zinc-200 transition hover:bg-white/[0.07]"
+                  >
+                    {isZh ? "开始生成" : "Start Generating"}
+                  </Link>
+
+                  <Link
+                    href={`/${locale}/account`}
+                    className="rounded-2xl bg-emerald-400 px-5 py-3 text-sm font-semibold text-black transition hover:bg-emerald-300"
+                  >
+                    {isZh ? "查看账户" : "View Account"}
+                  </Link>
                 </div>
               </div>
-            </div>
-          </div>
-        ) : (
-          <div className="mx-auto mt-10 max-w-3xl rounded-[28px] border border-emerald-400/20 bg-emerald-400/10 p-5 text-center text-sm text-emerald-300">
-            {isZh
-              ? "你当前还没有登录。登录后可以更方便地查看当前套餐与升级入口。"
-              : "You are not logged in yet. Sign in to view your current plan and upgrade options."}
-          </div>
-        )}
 
-        <div className="mt-12 grid gap-6 xl:grid-cols-3">
-          {PRICING_PLANS.map((plan) => (
-            <div
-              key={plan.key}
-              className={`relative rounded-[32px] p-7 shadow-[0_20px_60px_rgba(0,0,0,0.22)] ${
-                plan.key === "pro"
-                  ? "border border-emerald-400/20 bg-gradient-to-b from-emerald-400/10 to-zinc-950"
-                  : "border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950"
-              }`}
-            >
-              {plan.badgeZh || plan.badgeEn ? (
-                <div className="absolute right-5 top-5 rounded-full border border-emerald-400/20 bg-emerald-400/15 px-3 py-1 text-xs text-emerald-300">
-                  {isZh ? plan.badgeZh : plan.badgeEn}
+              {profile?.status === "banned" ? (
+                <div className="mt-5 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                  {isZh
+                    ? "你的账号当前处于封禁状态，暂时无法继续生成内容。"
+                    : "Your account is currently banned and cannot generate content."}
                 </div>
               ) : null}
-
-              <div className={`text-sm font-medium ${plan.key === "pro" ? "text-emerald-300" : "text-zinc-400"}`}>
-                {plan.name}
-              </div>
-
-              <div className="mt-3 text-4xl font-bold text-white">
-                {isZh ? plan.zhTitle : plan.enTitle}
-              </div>
-
-              <div className="mt-4 text-2xl font-semibold text-white">
-                {formatPlanPriceCny(plan.priceCnyMonthly)}
-                <span className="ml-1 text-sm font-normal text-zinc-400">
-                  /{isZh ? "月" : "mo"}
-                </span>
-              </div>
-
-              <div className="mt-2 text-sm text-zinc-300">
-                {isZh ? plan.zhDesc : plan.enDesc}
-              </div>
-
-              <div className="mt-6 space-y-3 text-sm text-zinc-200">
-                {(isZh ? plan.zhFeatures : plan.enFeatures).map((item) => (
-                  <div key={item}>• {item}</div>
-                ))}
-              </div>
-
-              {renderAction(plan.key)}
             </div>
-          ))}
-        </div>
-
-        <div className="mt-12 rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-7">
-          <div className="text-2xl font-bold text-white">
-            {isZh ? "说明" : "Notes"}
           </div>
 
-          <div className="mt-5 grid gap-4 md:grid-cols-3">
-            <div className="rounded-[24px] border border-white/8 bg-black/25 p-5 text-sm leading-7 text-zinc-300">
-              {isZh
-                ? "首页套餐区、billing 页、账户中心已经统一使用同一份配置文件。"
-                : "Homepage pricing, billing page, and account center now use the same pricing config."}
+          <div className="rounded-[36px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-6 md:p-8">
+            <div className="mb-6 flex items-center justify-between gap-3">
+              <div>
+                <div className="text-2xl font-semibold text-white">
+                  {isZh ? "套餐概览" : "Plan Overview"}
+                </div>
+                <div className="mt-2 text-sm text-zinc-400">
+                  {isZh
+                    ? "你可以在这里查看不同套餐的功能对比以及升级选项"
+                    : "Here you can review the feature comparison and upgrade options between different plans."}
+                </div>
+              </div>
+
+              <div className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-zinc-400">
+                {currentPlan.name}
+              </div>
             </div>
 
-            <div className="rounded-[24px] border border-white/8 bg-black/25 p-5 text-sm leading-7 text-zinc-300">
-              {isZh
-                ? "以后如果你想改价格、额度、文案，只需要修改 src/lib/pricing.ts。"
-                : "To change pricing, quotas, or copy later, edit src/lib/pricing.ts only."}
+            <div className="grid gap-5">
+              {PRICING_PLANS.map((plan) => {
+                const isCurrent = profile?.plan === plan.key;
+
+                return (
+                  <div
+                    key={plan.key}
+                    className={`rounded-[28px] border p-5 ${
+                      isCurrent
+                        ? "border-emerald-400/20 bg-emerald-400/10"
+                        : "border-white/10 bg-black/20"
+                    }`}
+                  >
+                    <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <div className="text-2xl font-bold text-white">{plan.name}</div>
+
+                          {isCurrent ? (
+                            <div className="rounded-full border border-emerald-400/20 bg-emerald-400/15 px-3 py-1 text-xs text-emerald-300">
+                              {isZh ? "当前套餐" : "Current"}
+                            </div>
+                          ) : null}
+                        </div>
+
+                        <div className="mt-3 text-sm text-zinc-300">
+                          {isZh ? plan.zhDesc : plan.enDesc}
+                        </div>
+
+                        <div className="mt-4 text-sm text-zinc-400">
+                          {formatPlanPriceCny(plan.priceCnyMonthly)}
+                          <span className="ml-1">/{isZh ? "月" : "mo"}</span>
+                        </div>
+
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          {(isZh ? plan.zhFeatures : plan.enFeatures).map((item) => (
+                            <div
+                              key={item}
+                              className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-zinc-300"
+                            >
+                              {item}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="xl:w-[240px]">
+                        {isCurrent ? (
+                          <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/15 px-5 py-3 text-center text-sm font-medium text-emerald-300">
+                            {isZh ? "当前使用中" : "Currently Active"}
+                          </div>
+                        ) : (
+                          <Link
+                            href={`/${locale}/billing`}
+                            className={`block rounded-2xl px-5 py-3 text-center text-sm transition ${
+                              plan.key === "pro"
+                                ? "bg-emerald-400 font-semibold text-black hover:bg-emerald-300"
+                                : "border border-white/10 bg-white/[0.03] text-zinc-200 hover:bg-white/[0.07]"
+                            }`}
+                          >
+                            {isZh ? "升级到此套餐" : "Upgrade to this plan"}
+                          </Link>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
-            <div className="rounded-[24px] border border-white/8 bg-black/25 p-5 text-sm leading-7 text-zinc-300">
+            <div className="mt-8 rounded-[24px] border border-white/8 bg-black/25 p-5 text-sm leading-7 text-zinc-300">
               {isZh
-                ? "如果后面要接正式支付，这一层页面结构已经准备好，不需要再重做展示层。"
-                : "If you connect real payment later, the page structure is already ready and won’t need a redesign."}
+                ? "选择合适的套餐后，点击上方按钮完成升级。"
+                : "Click the button above to upgrade to the selected plan."}
             </div>
           </div>
         </div>
