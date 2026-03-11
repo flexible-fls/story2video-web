@@ -3,13 +3,13 @@ import { type Locale } from "@/lib/i18n";
 
 export default function LanguageSwitch({ locale }: { locale: Locale }) {
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] p-1 backdrop-blur">
       <Link
         href="/zh"
-        className={`rounded-full border px-4 py-2 text-sm ${
+        className={`rounded-full px-4 py-2 text-sm transition ${
           locale === "zh"
-            ? "border-white/15 bg-white/10 text-white"
-            : "border-white/10 bg-white/5 text-zinc-300"
+            ? "bg-white text-black shadow-sm"
+            : "text-zinc-300 hover:bg-white/5 hover:text-white"
         }`}
       >
         中文
@@ -17,10 +17,10 @@ export default function LanguageSwitch({ locale }: { locale: Locale }) {
 
       <Link
         href="/en"
-        className={`rounded-full border px-4 py-2 text-sm ${
+        className={`rounded-full px-4 py-2 text-sm transition ${
           locale === "en"
-            ? "border-white/15 bg-white/10 text-white"
-            : "border-white/10 bg-white/5 text-zinc-300"
+            ? "bg-white text-black shadow-sm"
+            : "text-zinc-300 hover:bg-white/5 hover:text-white"
         }`}
       >
         EN

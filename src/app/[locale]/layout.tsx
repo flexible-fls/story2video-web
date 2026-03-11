@@ -77,15 +77,12 @@ export default function LocaleLayout({
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#05070b] text-white">
+    <div className="min-h-screen bg-transparent text-white">
       {!isHomePage && (
-        <header className="sticky top-0 z-40 border-b border-white/10 bg-[#05070b]/85 backdrop-blur-xl">
+        <header className="sticky top-0 z-40 border-b border-white/10 bg-[#05070b]/80 backdrop-blur-xl">
           <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-4">
             <div className="flex min-w-0 items-center gap-4">
-              <Link
-                href={`/${locale}`}
-                className="group flex min-w-0 flex-col"
-              >
+              <Link href={`/${locale}`} className="group flex min-w-0 flex-col">
                 <span className="text-lg font-semibold tracking-tight text-white transition group-hover:text-emerald-300">
                   FulushouVideo
                 </span>
