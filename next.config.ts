@@ -1,16 +1,10 @@
-import type { NextConfig } from 'next'
-
-const nextConfig: NextConfig = {
+// next.config.js
+module.exports = {
   reactStrictMode: true,
-  poweredByHeader: false,
   webpack: (config, { isServer }) => {
-    if (!isServer) {
-      config.resolve.fallback = {
-        fs: false,
-      }
-    }
-    return config
+    return config; // 你可以添加自定义的 Webpack 配置
+  },
+  experimental: {
+    turboPack: false // 禁用 TurboPack
   }
-}
-
-export default nextConfig
+};

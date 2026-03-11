@@ -6,9 +6,7 @@ import { supabase } from "@/lib/supabase";
 import LanguageSwitch from "@/components/LanguageSwitch";
 import BackButton from "@/components/BackButton";
 import Link from "next/link";
-
-// 假设 PricingPlan 是一个组件或文件，你需要确保导入路径正确
-import PricingPlan from "@/components/PricingPlan"; // 请确认路径是否正确
+import PricingPlan from "@/components/PricingPlan"; // 确保路径正确
 
 export default function GeneratePage() {
   const pathname = usePathname();
