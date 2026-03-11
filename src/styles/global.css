@@ -6,7 +6,7 @@ body {
   padding: 0;
 }
 
-/* 返回首页按钮 */
+/* 返回首页按钮样式 */
 .btn-return-home {
   padding: 12px 24px;
   background: linear-gradient(45deg, #ff6600, #e65c00);
@@ -24,7 +24,7 @@ body {
   box-shadow: 0px 8px 20px rgba(0, 0, 0, 0.3);
 }
 
-/* 管理员入口按钮 */
+/* 管理员入口按钮样式 */
 .btn-admin-entry {
   padding: 12px 24px;
   background: linear-gradient(45deg, #ff6600, #ff3300);
