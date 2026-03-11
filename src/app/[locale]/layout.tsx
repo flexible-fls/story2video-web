@@ -1,89 +1,51 @@
-import type { Metadata } from "next";
+"use client";
 
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ locale: string }>;
-}): Promise<Metadata> {
-  const { locale } = await params;
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
+import { usePathname } from "next/navigation";
 
-  if (locale === "zh") {
-    return {
-      title: "AI短剧与漫剧生成平台",
-      description:
-        "FulushouVideo 是面向真人短剧与漫剧团队的 AI 生产平台，支持剧本解析、角色识别、分镜生成、爆点文案与视频预览工作流。",
-      keywords: [
-        "AI短剧生成",
-        "AI漫剧生成",
-        "剧本转视频",
-        "短剧分镜生成",
-        "短剧生产平台",
-        "FulushouVideo",
-      ],
-      openGraph: {
-        title: "FulushouVideo - AI短剧与漫剧生成平台",
-        description:
-          "上传剧本，自动解析角色、分镜、标题文案与视频预览结果。",
-        url: "https://fulushouvideo.com/zh",
-        locale: "zh_CN",
-        type: "website",
-      },
-      twitter: {
-        card: "summary_large_image",
-        title: "FulushouVideo - AI短剧与漫剧生成平台",
-        description:
-          "上传剧本，自动解析角色、分镜、标题文案与视频预览结果。",
-      },
-      alternates: {
-        canonical: "https://fulushouvideo.com/zh",
-        languages: {
-          zh: "https://fulushouvideo.com/zh",
-          en: "https://fulushouvideo.com/en",
-        },
-      },
+export default function Layout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const checkAdminStatus = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+
+      // Check if the current user's email is in the admin list
+      if (user && process.env.NEXT_PUBLIC_ADMIN_EMAILS?.split(",").includes(user.email)) {
+        setIsAdmin(true);
+      }
+      setLoading(false);
     };
-  }
 
-  return {
-    title: "AI Drama & Comic Video Studio",
-    description:
-      "FulushouVideo is an AI production platform for live-action short dramas and comic videos, supporting script parsing, character extraction, storyboard generation, hook copy, and video preview workflows.",
-    keywords: [
-      "AI drama generator",
-      "AI comic generator",
-      "script to video",
-      "storyboard generator",
-      "AI short drama production",
-      "FulushouVideo",
-    ],
-    openGraph: {
-      title: "FulushouVideo - AI Drama & Comic Video Studio",
-      description:
-        "Upload scripts and generate characters, storyboard, AI titles, cover copy, and preview-ready outputs.",
-      url: "https://fulushouvideo.com/en",
-      locale: "en_US",
-      type: "website",
-    },
-    twitter: {
-      card: "summary_large_image",
-      title: "FulushouVideo - AI Drama & Comic Video Studio",
-      description:
-        "Upload scripts and generate characters, storyboard, AI titles, cover copy, and preview-ready outputs.",
-    },
-    alternates: {
-      canonical: "https://fulushouvideo.com/en",
-      languages: {
-        zh: "https://fulushouvideo.com/zh",
-        en: "https://fulushouvideo.com/en",
-      },
-    },
-  };
-}
+    checkAdminStatus();
+  }, []);
 
-export default function LocaleLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return <>{children}</>;
+  return (
+    <div>
+      <header className="flex justify-between items-center py-6 px-8 bg-gray-900 text-white shadow-md">
+        {/* 只有在不是首页的页面才显示返回首页按钮 */}
+        {pathname !== '/' && (
+          <Link href="/" className="btn-return-home">
+            返回首页
+          </Link>
+        )}
+      </header>
+
+      {/* 管理员入口放回账户中心页面 */}
+      {!loading && isAdmin && pathname === "/account" && (
+        <div className="admin-entry-container text-center mt-6">
+          <Link href="/admin" className="btn-admin-entry">
+            管理员入口
+          </Link>
+        </div>
+      )}
+
+      {/* 页面内容 */}
+      <main>{children}</main>
+    </div>
+  );
 }
