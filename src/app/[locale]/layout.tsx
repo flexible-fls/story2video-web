@@ -14,8 +14,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     const checkAdminStatus = async () => {
       const { data: { user } } = await supabase.auth.getUser();
 
-      // Check if the current user's email is in the admin list
-      if (user && process.env.NEXT_PUBLIC_ADMIN_EMAILS?.split(",").includes(user.email)) {
+      // 确保 NEXT_PUBLIC_ADMIN_EMAILS 配置了，并且避免读取 undefined
+      const adminEmails = process.env.NEXT_PUBLIC_ADMIN_EMAILS;
+
+      if (user && adminEmails && adminEmails.split(",").includes(user.email)) {
         setIsAdmin(true);
       }
       setLoading(false);
