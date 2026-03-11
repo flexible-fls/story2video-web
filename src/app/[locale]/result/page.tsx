@@ -29,6 +29,24 @@ type ShotImageItem = {
   revisedPrompt?: string;
 };
 
+type VideoTaskItem = {
+  id: string;
+  shot: number;
+  title: string;
+  imageUrl: string;
+  promptText: string;
+  provider: "runway";
+  providerTaskId: string;
+  status: "queued" | "processing" | "succeeded" | "failed" | "unknown";
+  model: string;
+  ratio: string;
+  duration: number;
+  videoUrl?: string;
+  errorMessage?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 type StructuredResultPayload = {
   title: string;
   aiTitle: string;
@@ -49,6 +67,7 @@ type StructuredResultPayload = {
   };
   shotPrompts?: ShotPromptItem[];
   shotImages?: ShotImageItem[];
+  videoTasks?: VideoTaskItem[];
 };
 
 type GenerationJobRow = {
@@ -223,6 +242,12 @@ function buildPromptExportText(prompts: ShotPromptItem[], isZh: boolean) {
   return lines.join("\n");
 }
 
+function createVideoPrompt(shot: ShotImageItem, isZh: boolean) {
+  return isZh
+    ? `请基于这张镜头图生成一个高质量短视频镜头，保持角色一致性、场景一致性和镜头氛围，动作自然，运镜平稳，电影感光影，时长 5 秒，适合短剧与漫剧内容生产。镜头标题：${shot.title}`
+    : `Create a high-quality short video shot based on this frame. Keep character consistency, scene consistency, cinematic lighting, natural motion, smooth camera movement, and a polished short-drama/comic style. Duration 5 seconds. Shot title: ${shot.title}`;
+}
+
 export default function ResultPage() {
   const pathname = usePathname();
   const router = useRouter();
@@ -239,14 +264,20 @@ export default function ResultPage() {
 
   const [shotPrompts, setShotPrompts] = useState<ShotPromptItem[]>([]);
   const [shotImages, setShotImages] = useState<ShotImageItem[]>([]);
-  const [promptLoading, setPromptLoading] = useState(false);
-  const [imageLoading, setImageLoading] = useState(false);
-  const [promptInfo, setPromptInfo] = useState("");
-  const [imageInfo, setImageInfo] = useState("");
+  const [videoTasks, setVideoTasks] = useState<VideoTaskItem[]>([]);
+
+  const [videoActionLoadingId, setVideoActionLoadingId] = useState<string>("");
+  const [videoInfo, setVideoInfo] = useState("");
 
   useEffect(() => {
     bootstrap();
   }, [jobId, locale, router]);
+
+  useEffect(() => {
+    if (!copyMessage) return;
+    const timer = setTimeout(() => setCopyMessage(""), 1800);
+    return () => clearTimeout(timer);
+  }, [copyMessage]);
 
   async function bootstrap() {
     setLoading(true);
@@ -275,6 +306,7 @@ export default function ResultPage() {
           setPayload(legacy);
           setShotPrompts(legacy.shotPrompts || []);
           setShotImages(legacy.shotImages || []);
+          setVideoTasks(legacy.videoTasks || []);
         }
         setLoading(false);
         return;
@@ -287,12 +319,14 @@ export default function ResultPage() {
         setPayload(row.result_json);
         setShotPrompts(row.result_json.shotPrompts || []);
         setShotImages(row.result_json.shotImages || []);
+        setVideoTasks(row.result_json.videoTasks || []);
       } else {
         const legacy = loadLegacyResult();
         if (legacy) {
           setPayload(legacy);
           setShotPrompts(legacy.shotPrompts || []);
           setShotImages(legacy.shotImages || []);
+          setVideoTasks(legacy.videoTasks || []);
         }
       }
 
@@ -305,6 +339,7 @@ export default function ResultPage() {
       setPayload(legacy);
       setShotPrompts(legacy.shotPrompts || []);
       setShotImages(legacy.shotImages || []);
+      setVideoTasks(legacy.videoTasks || []);
     } else {
       setErrorMessage(isZh ? "当前没有可展示的结果" : "No result available");
     }
@@ -312,11 +347,41 @@ export default function ResultPage() {
     setLoading(false);
   }
 
-  useEffect(() => {
-    if (!copyMessage) return;
-    const timer = setTimeout(() => setCopyMessage(""), 1800);
-    return () => clearTimeout(timer);
-  }, [copyMessage]);
+  async function persistResult(
+    nextPayload: StructuredResultPayload
+  ) {
+    setPayload(nextPayload);
+
+    if (!jobId) return;
+
+    await supabase
+      .from("generation_jobs")
+      .update({
+        result_json: nextPayload,
+      })
+      .eq("id", jobId);
+  }
+
+  async function syncPayload(
+    nextShotPrompts?: ShotPromptItem[],
+    nextShotImages?: ShotImageItem[],
+    nextVideoTasks?: VideoTaskItem[]
+  ) {
+    if (!payload) return;
+
+    const updatedPayload: StructuredResultPayload = {
+      ...payload,
+      shotPrompts: nextShotPrompts ?? shotPrompts,
+      shotImages: nextShotImages ?? shotImages,
+      videoTasks: nextVideoTasks ?? videoTasks,
+    };
+
+    if (nextShotPrompts) setShotPrompts(nextShotPrompts);
+    if (nextShotImages) setShotImages(nextShotImages);
+    if (nextVideoTasks) setVideoTasks(nextVideoTasks);
+
+    await persistResult(updatedPayload);
+  }
 
   const stats = useMemo(() => {
     if (!payload) return [];
@@ -333,148 +398,15 @@ export default function ResultPage() {
         value: payload.storyboard.length,
       },
       {
-        label: isZh ? "封面文案" : "Cover Copies",
-        value: payload.coverCopy.length,
+        label: isZh ? "镜头图数量" : "Shot Images",
+        value: shotImages.length,
       },
       {
-        label: isZh ? "剧本字数" : "Script Length",
-        value: scriptLength,
+        label: isZh ? "视频任务数" : "Video Tasks",
+        value: videoTasks.length,
       },
     ];
-  }, [payload, isZh]);
-
-  async function persistAssets(
-    nextPrompts?: ShotPromptItem[],
-    nextImages?: ShotImageItem[]
-  ) {
-    if (!payload) return;
-
-    const updatedPayload: StructuredResultPayload = {
-      ...payload,
-      shotPrompts: nextPrompts ?? shotPrompts,
-      shotImages: nextImages ?? shotImages,
-    };
-
-    setPayload(updatedPayload);
-
-    if (!jobId) return;
-
-    await supabase
-      .from("generation_jobs")
-      .update({
-        result_json: updatedPayload,
-      })
-      .eq("id", jobId);
-  }
-
-  async function generatePromptsInternal(currentPayload: StructuredResultPayload) {
-    const res = await fetch("/api/generate-shot-prompts", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        locale,
-        result: currentPayload,
-      }),
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      throw new Error(data?.error || (isZh ? "分镜 Prompt 生成失败" : "Prompt generation failed"));
-    }
-
-    const prompts = Array.isArray(data?.prompts) ? (data.prompts as ShotPromptItem[]) : [];
-    const info = data?.provider && data?.model ? `${data.provider} / ${data.model}` : "";
-
-    return { prompts, info };
-  }
-
-  async function handleGenerateShotPrompts() {
-    if (!payload) return;
-
-    setPromptLoading(true);
-    setPromptInfo("");
-
-    try {
-      const { prompts, info } = await generatePromptsInternal(payload);
-      setShotPrompts(prompts);
-      setPromptInfo(info);
-      await persistAssets(prompts, undefined);
-    } catch (error) {
-      setPromptInfo(
-        error instanceof Error
-          ? error.message
-          : isZh
-          ? "分镜 Prompt 生成失败"
-          : "Prompt generation failed"
-      );
-    } finally {
-      setPromptLoading(false);
-    }
-  }
-
-  async function handleGenerateShotImages() {
-    if (!payload) return;
-
-    setImageLoading(true);
-    setImageInfo("");
-
-    try {
-      let prompts = shotPrompts;
-
-      if (prompts.length === 0) {
-        const generated = await generatePromptsInternal(payload);
-        prompts = generated.prompts;
-        setShotPrompts(prompts);
-        setPromptInfo(generated.info);
-        await persistAssets(prompts, undefined);
-      }
-
-      if (prompts.length === 0) {
-        throw new Error(isZh ? "没有可用于生成图片的 Prompt" : "No prompts available for image generation");
-      }
-
-      const res = await fetch("/api/generate-shot-images", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          locale,
-          prompts,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data?.error || (isZh ? "图片生成失败" : "Image generation failed"));
-      }
-
-      const images = Array.isArray(data?.images) ? (data.images as ShotImageItem[]) : [];
-      setShotImages(images);
-
-      if (data?.provider && data?.model) {
-        setImageInfo(
-          `${data.provider} / ${data.model}${data?.size ? ` / ${data.size}` : ""}${data?.quality ? ` / ${data.quality}` : ""}`
-        );
-      }
-
-      await persistAssets(prompts, images);
-    } catch (error) {
-      setImageInfo(
-        error instanceof Error
-          ? error.message
-          : isZh
-          ? "图片生成失败"
-          : "Image generation failed"
-      );
-    } finally {
-      setImageLoading(false);
-    }
-  }
+  }, [payload, isZh, shotImages.length, videoTasks.length]);
 
   function formatTime(value?: string) {
     if (!value) return "-";
@@ -514,6 +446,14 @@ export default function ResultPage() {
     return format;
   }
 
+  function formatVideoTaskStatus(status: VideoTaskItem["status"]) {
+    if (status === "queued") return isZh ? "排队中" : "Queued";
+    if (status === "processing") return isZh ? "生成中" : "Processing";
+    if (status === "succeeded") return isZh ? "成功" : "Succeeded";
+    if (status === "failed") return isZh ? "失败" : "Failed";
+    return isZh ? "未知" : "Unknown";
+  }
+
   async function copyStructuredResult() {
     if (!payload) return;
     const text = buildExportText(payload, isZh);
@@ -529,7 +469,7 @@ export default function ResultPage() {
 
   async function copyPromptText(text: string) {
     await navigator.clipboard.writeText(text);
-    setCopyMessage(isZh ? "Prompt 已复制" : "Prompt copied");
+    setCopyMessage(isZh ? "内容已复制" : "Copied");
   }
 
   function exportJson() {
@@ -550,6 +490,116 @@ export default function ResultPage() {
     const fileName = `${payload.title || "result"}-shot-prompts.txt`;
     const text = buildPromptExportText(shotPrompts, isZh);
     downloadTextFile(fileName, text);
+  }
+
+  async function handleCreateVideoTask(shot: ShotImageItem) {
+    setVideoActionLoadingId(`create-${shot.shot}`);
+    setVideoInfo("");
+
+    try {
+      const promptText = createVideoPrompt(shot, isZh);
+
+      const response = await fetch("/api/video/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          imageUrl: shot.imageUrl,
+          promptText,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.error || (isZh ? "创建视频任务失败" : "Failed to create video task"));
+      }
+
+      const now = new Date().toISOString();
+      const newTask: VideoTaskItem = {
+        id: `${shot.shot}-${data.providerTaskId}`,
+        shot: shot.shot,
+        title: shot.title,
+        imageUrl: shot.imageUrl,
+        promptText,
+        provider: "runway",
+        providerTaskId: data.providerTaskId,
+        status: data.status || "queued",
+        model: data.model || "gen4.5",
+        ratio: data.ratio || "1280:720",
+        duration: data.duration || 5,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      const nextTasks = [newTask, ...videoTasks.filter((item) => item.id !== newTask.id)];
+      await syncPayload(undefined, undefined, nextTasks);
+
+      setVideoInfo(
+        isZh
+          ? `已创建视频任务：镜头 ${shot.shot}`
+          : `Video task created for shot ${shot.shot}`
+      );
+    } catch (error) {
+      setVideoInfo(
+        error instanceof Error
+          ? error.message
+          : isZh
+          ? "创建视频任务失败"
+          : "Failed to create video task"
+      );
+    } finally {
+      setVideoActionLoadingId("");
+    }
+  }
+
+  async function handleRefreshVideoTask(task: VideoTaskItem) {
+    setVideoActionLoadingId(`refresh-${task.providerTaskId}`);
+    setVideoInfo("");
+
+    try {
+      const response = await fetch(`/api/video/status/${task.providerTaskId}`, {
+        method: "GET",
+        cache: "no-store",
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.error || (isZh ? "查询视频任务失败" : "Failed to query video task"));
+      }
+
+      const nextTasks = videoTasks.map((item) => {
+        if (item.providerTaskId !== task.providerTaskId) return item;
+
+        return {
+          ...item,
+          status: data.status || item.status,
+          videoUrl: data.videoUrl || item.videoUrl,
+          errorMessage: data.errorMessage || item.errorMessage,
+          updatedAt: new Date().toISOString(),
+        };
+      });
+
+      await syncPayload(undefined, undefined, nextTasks);
+
+      setVideoInfo(
+        isZh
+          ? `已刷新视频任务：镜头 ${task.shot}`
+          : `Video task refreshed for shot ${task.shot}`
+      );
+    } catch (error) {
+      setVideoInfo(
+        error instanceof Error
+          ? error.message
+          : isZh
+          ? "查询视频任务失败"
+          : "Failed to query video task"
+      );
+    } finally {
+      setVideoActionLoadingId("");
+    }
   }
 
   if (loading) {
@@ -607,13 +657,13 @@ export default function ResultPage() {
             </div>
 
             <h1 className="max-w-4xl text-5xl font-bold leading-[1.08] tracking-tight text-white md:text-6xl">
-              {isZh ? "查看你的生成结果与结构化内容" : "Review your generated structured output"}
+              {isZh ? "查看你的生成结果与视频工作流" : "Review your result and video workflow"}
             </h1>
 
             <p className="mt-6 max-w-2xl text-lg leading-8 text-zinc-300">
               {isZh
-                ? "这里会展示剧本解析后的结构化结果，包括项目信息、剧情摘要、角色列表、分镜脚本、剧本识别信息、封面文案建议，以及下一步可直接用于出图的分镜 Prompt 和镜头图片。"
-                : "This page shows your structured output, including project info, story summary, characters, storyboard, preprocess info, cover copy, and image-ready shot prompts with generated images."}
+                ? "这里会展示剧本解析后的结构化结果、分镜 Prompt、镜头图片，以及最新接入的图生视频任务。"
+                : "This page shows structured script results, shot prompts, shot images, and the newly integrated image-to-video workflow."}
             </p>
 
             <div className="mt-10 grid gap-4 sm:grid-cols-4">
@@ -636,7 +686,7 @@ export default function ResultPage() {
                 {isZh ? "任务摘要" : "Job Summary"}
               </div>
               <div className="mt-2 text-sm text-zinc-400">
-                {isZh ? "当前任务的状态、套餐和结果入口。" : "Status, plan, and result access for the current job."}
+                {isZh ? "当前任务状态与导出入口。" : "Current job status and export actions."}
               </div>
 
               {errorMessage && (
@@ -661,20 +711,6 @@ export default function ResultPage() {
                     {isZh ? `进度 ${job?.progress ?? 0}%` : `Progress ${job?.progress ?? 0}%`}
                   </div>
                 </div>
-                <div className="mt-4 h-3 rounded-full bg-zinc-900">
-                  <div
-                    className={`h-3 rounded-full ${
-                      job?.status === "success"
-                        ? "bg-emerald-400"
-                        : job?.status === "failed"
-                        ? "bg-red-400"
-                        : job?.status === "processing"
-                        ? "bg-blue-400"
-                        : "bg-zinc-400"
-                    }`}
-                    style={{ width: `${Math.max(Math.min(job?.progress ?? 0, 100), job?.progress ? 6 : 0)}%` }}
-                  />
-                </div>
               </div>
 
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -698,13 +734,6 @@ export default function ResultPage() {
                 <div className="text-sm text-zinc-400">{isZh ? "更新时间" : "Updated At"}</div>
                 <div className="mt-3 text-base text-zinc-200">{formatTime(job?.updated_at)}</div>
               </div>
-
-              {job?.error_message ? (
-                <div className="mt-4 rounded-[24px] border border-red-500/20 bg-red-500/10 p-5">
-                  <div className="text-sm text-red-300">{isZh ? "错误信息" : "Error Message"}</div>
-                  <div className="mt-3 text-sm leading-7 text-red-200">{job.error_message}</div>
-                </div>
-              ) : null}
 
               {payload ? (
                 <div className="mt-6 rounded-[24px] border border-white/8 bg-black/40 p-5">
@@ -757,26 +786,12 @@ export default function ResultPage() {
             <div className="mt-3 text-zinc-400">
               {isZh ? "你可以返回任务中心，或者重新创建新的生成任务。" : "You can go back to the jobs center or start a new generation."}
             </div>
-            <div className="mt-6 flex justify-center gap-4">
-              <Link
-                href={`/${locale}/jobs`}
-                className="rounded-2xl border border-white/10 bg-white/[0.03] px-6 py-3 text-sm text-zinc-200"
-              >
-                {isZh ? "返回任务中心" : "Back to Jobs"}
-              </Link>
-              <Link
-                href={`/${locale}/generate`}
-                className="rounded-2xl bg-emerald-400 px-6 py-3 text-sm font-semibold text-black"
-              >
-                {isZh ? "去生成" : "Create Now"}
-              </Link>
-            </div>
           </div>
         </section>
       ) : (
         <>
           <section className="mx-auto max-w-7xl px-6 py-12">
-            <div className="rounded-[32px] border border-white/10 bg-gradient-to-r from-zinc-900/90 via-zinc-900/80 to-zinc-900/90 p-8 shadow-[0_10px_40px_rgba(0,0,0,0.25)]">
+            <div className="rounded-[32px] border border-white/10 bg-gradient-to-r from-zinc-900/90 via-zinc-900/80 to-zinc-900/90 p-8">
               <div className="max-w-4xl">
                 <div className="text-sm font-medium text-emerald-300">
                   {isZh ? "项目定位" : "Project Snapshot"}
@@ -785,7 +800,7 @@ export default function ResultPage() {
                   {payload.aiTitle || payload.title || (isZh ? "未命名项目" : "Untitled Project")}
                 </h2>
                 <p className="mt-4 text-base leading-8 text-zinc-300">
-                  {payload.summary || (isZh ? "暂无剧情摘要" : "No story summary yet.")}
+                  {payload.summary || (isZh ? "暂无剧情摘要" : "No summary")}
                 </p>
               </div>
             </div>
@@ -794,14 +809,12 @@ export default function ResultPage() {
           {payload.preprocessInfo ? (
             <section className="mx-auto max-w-7xl px-6 py-12">
               <div className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-7">
-                <div className="mb-5 flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-medium text-emerald-300">
-                      {isZh ? "剧本识别信息" : "Script Recognition Info"}
-                    </div>
-                    <div className="mt-2 text-3xl font-bold text-white">
-                      {isZh ? "系统对剧本的预识别结果" : "System preprocessing insights"}
-                    </div>
+                <div className="mb-5">
+                  <div className="text-sm font-medium text-emerald-300">
+                    {isZh ? "剧本识别信息" : "Script Recognition Info"}
+                  </div>
+                  <div className="mt-2 text-3xl font-bold text-white">
+                    {isZh ? "系统对剧本的预识别结果" : "System preprocessing insights"}
                   </div>
                 </div>
 
@@ -883,25 +896,14 @@ export default function ResultPage() {
                 <div className="rounded-[24px] border border-emerald-400/15 bg-emerald-400/10 p-5 text-base leading-8 text-zinc-100">
                   {payload.hook || (isZh ? "暂无爆点文案" : "No hook copy")}
                 </div>
-
-                <div className="mt-5 text-sm text-zinc-400">
-                  {isZh ? "这部分适合首页传播、封面文案和短视频开头钩子。" : "This section is suitable for cover text, distribution hooks, and opening lines."}
-                </div>
               </div>
             </div>
           </section>
 
           <section className="mx-auto max-w-7xl px-6 py-12">
             <div className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-7">
-              <div className="mb-5 flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-sm font-medium text-emerald-300">
-                    {isZh ? "封面文案建议" : "Cover Copy Suggestions"}
-                  </div>
-                  <div className="mt-2 text-3xl font-bold text-white">
-                    {isZh ? "更适合传播的标题与封面内容" : "Copy ideas better suited for distribution"}
-                  </div>
-                </div>
+              <div className="mb-5 text-3xl font-bold text-white">
+                {isZh ? "封面文案建议" : "Cover Copy Suggestions"}
               </div>
 
               {payload.coverCopy.length > 0 ? (
@@ -964,15 +966,8 @@ export default function ResultPage() {
 
           <section className="mx-auto max-w-7xl px-6 py-12">
             <div className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-7">
-              <div className="mb-5 flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-sm font-medium text-emerald-300">
-                    {isZh ? "分镜脚本" : "Storyboard"}
-                  </div>
-                  <div className="mt-2 text-3xl font-bold text-white">
-                    {isZh ? "适合短剧与漫剧制作的镜头结构" : "Shot structure for drama and comic production"}
-                  </div>
-                </div>
+              <div className="mb-5 text-3xl font-bold text-white">
+                {isZh ? "分镜脚本" : "Storyboard"}
               </div>
 
               {payload.storyboard.length > 0 ? (
@@ -999,60 +994,12 @@ export default function ResultPage() {
           </section>
 
           <section className="mx-auto max-w-7xl px-6 py-12">
-            <div className="rounded-[32px] border border-emerald-400/20 bg-gradient-to-b from-emerald-400/10 to-zinc-950 p-7">
-              <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <div className="text-sm font-medium text-emerald-300">
-                    {isZh ? "AI 出图 Prompt" : "AI Image Prompts"}
-                  </div>
-                  <div className="mt-2 text-3xl font-bold text-white">
-                    {isZh ? "把分镜直接变成出图提示词" : "Turn storyboard into image-ready prompts"}
-                  </div>
-                  <div className="mt-3 text-sm leading-7 text-zinc-300">
-                    {isZh
-                      ? "这是 AI 生产链的下一环。先生成每个镜头的 Prompt，再直接生成镜头图。"
-                      : "This is the next stage of the AI production chain. Generate prompts for each shot, then generate shot images directly."}
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-3">
-                  <button
-                    onClick={handleGenerateShotPrompts}
-                    disabled={promptLoading}
-                    className="rounded-2xl bg-emerald-400 px-6 py-3 text-sm font-semibold text-black disabled:opacity-50"
-                  >
-                    {promptLoading
-                      ? isZh
-                        ? "生成中..."
-                        : "Generating..."
-                      : isZh
-                      ? "生成分镜 Prompt"
-                      : "Generate Shot Prompts"}
-                  </button>
-
-                  <button
-                    onClick={exportPromptTxt}
-                    disabled={shotPrompts.length === 0}
-                    className="rounded-2xl border border-white/10 bg-white/[0.03] px-6 py-3 text-sm text-zinc-200 disabled:opacity-50"
-                  >
-                    {isZh ? "导出 Prompt" : "Export Prompts"}
-                  </button>
-                </div>
+            <div className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-7">
+              <div className="mb-5 text-3xl font-bold text-white">
+                {isZh ? "镜头 Prompt" : "Shot Prompts"}
               </div>
 
-              {promptInfo && (
-                <div className="mb-5 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-zinc-300">
-                  {promptInfo}
-                </div>
-              )}
-
-              {shotPrompts.length === 0 ? (
-                <div className="rounded-[24px] border border-white/8 bg-black/25 p-5 text-zinc-400">
-                  {isZh
-                    ? "还没有生成 Prompt。点击上方按钮后，系统会为每个镜头生成中文 Prompt、英文 Prompt 和负面提示词。"
-                    : "No prompts generated yet. Click the button above to create Chinese prompts, English prompts, and negative prompts for each shot."}
-                </div>
-              ) : (
+              {shotPrompts.length > 0 ? (
                 <div className="space-y-5">
                   {shotPrompts.map((item) => (
                     <div
@@ -1079,12 +1026,6 @@ export default function ResultPage() {
                             className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-xs text-zinc-200"
                           >
                             {isZh ? "复制英文 Prompt" : "Copy EN Prompt"}
-                          </button>
-                          <button
-                            onClick={() => copyPromptText(item.negativePrompt)}
-                            className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-xs text-zinc-200"
-                          >
-                            {isZh ? "复制负面词" : "Copy Negative"}
                           </button>
                         </div>
                       </div>
@@ -1120,112 +1061,160 @@ export default function ResultPage() {
                     </div>
                   ))}
                 </div>
+              ) : (
+                <div className="rounded-[24px] border border-white/8 bg-black/25 p-5 text-zinc-400">
+                  {isZh ? "还没有镜头 Prompt 数据" : "No shot prompts yet"}
+                </div>
               )}
             </div>
           </section>
 
           <section className="mx-auto max-w-7xl px-6 py-12">
             <div className="rounded-[32px] border border-cyan-400/20 bg-gradient-to-b from-cyan-400/10 to-zinc-950 p-7">
-              <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <div className="text-sm font-medium text-cyan-300">
-                    {isZh ? "镜头图片生成" : "Shot Image Generation"}
-                  </div>
-                  <div className="mt-2 text-3xl font-bold text-white">
-                    {isZh ? "把 Prompt 直接转成镜头图" : "Turn prompts directly into shot images"}
-                  </div>
-                  <div className="mt-3 text-sm leading-7 text-zinc-300">
-                    {isZh
-                      ? "点击后会直接为每个镜头生成图片。生成结果会保存到当前任务结果里，下次打开还能继续看。"
-                      : "Click to generate images for each shot. The results are saved into this job result so they remain available later."}
-                  </div>
+              <div className="mb-5">
+                <div className="text-sm font-medium text-cyan-300">
+                  {isZh ? "镜头图片与图生视频" : "Shot Images & Image-to-Video"}
                 </div>
-
-                <div className="flex flex-wrap gap-3">
-                  <button
-                    onClick={handleGenerateShotImages}
-                    disabled={imageLoading || promptLoading}
-                    className="rounded-2xl bg-cyan-400 px-6 py-3 text-sm font-semibold text-black disabled:opacity-50"
-                  >
-                    {imageLoading
-                      ? isZh
-                        ? "出图中..."
-                        : "Generating images..."
-                      : isZh
-                      ? "生成镜头图片"
-                      : "Generate Shot Images"}
-                  </button>
+                <div className="mt-2 text-3xl font-bold text-white">
+                  {isZh ? "基于镜头图直接创建视频任务" : "Create video tasks directly from shot images"}
+                </div>
+                <div className="mt-3 text-sm leading-7 text-zinc-300">
+                  {isZh
+                    ? "每张镜头图都可以单独发起视频生成，这样你后面就能按镜头逐个修改、逐个重做。"
+                    : "Each shot image can create its own video task, so you can revise and retry shot by shot later."}
                 </div>
               </div>
 
-              {imageInfo && (
+              {videoInfo && (
                 <div className="mb-5 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-zinc-300">
-                  {imageInfo}
+                  {videoInfo}
                 </div>
               )}
 
-              {shotImages.length === 0 ? (
-                <div className="rounded-[24px] border border-white/8 bg-black/25 p-5 text-zinc-400">
-                  {isZh
-                    ? "还没有生成镜头图片。系统会优先使用上面生成好的 Prompt，没有的话会自动先生成 Prompt 再出图。"
-                    : "No shot images yet. The system will use the prompts above, or auto-generate prompts first if needed."}
+              {shotImages.length > 0 ? (
+                <div className="space-y-6">
+                  {shotImages.map((item) => {
+                    const relatedTasks = videoTasks.filter((task) => task.shot === item.shot);
+
+                    return (
+                      <div
+                        key={`${item.shot}-${item.title}`}
+                        className="rounded-[24px] border border-white/8 bg-black/25 p-5"
+                      >
+                        <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                          <div>
+                            <div className="inline-flex rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-xs text-cyan-300">
+                              {isZh ? `镜头 ${item.shot}` : `Shot ${item.shot}`}
+                            </div>
+                            <div className="mt-3 text-xl font-semibold text-white">{item.title}</div>
+                          </div>
+
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              onClick={() => handleCreateVideoTask(item)}
+                              disabled={videoActionLoadingId === `create-${item.shot}`}
+                              className="rounded-xl bg-cyan-400 px-4 py-2 text-xs font-semibold text-black disabled:opacity-50"
+                            >
+                              {videoActionLoadingId === `create-${item.shot}`
+                                ? isZh
+                                  ? "创建中..."
+                                  : "Creating..."
+                                : isZh
+                                ? "生成该镜头视频"
+                                : "Create Video for This Shot"}
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">
+                          <div className="overflow-hidden rounded-[20px] border border-white/8 bg-zinc-950">
+                            <img
+                              src={item.imageUrl}
+                              alt={item.title}
+                              className="h-full w-full object-cover"
+                            />
+                          </div>
+
+                          <div className="space-y-4">
+                            {relatedTasks.length > 0 ? (
+                              relatedTasks.map((task) => (
+                                <div
+                                  key={task.id}
+                                  className="rounded-[20px] border border-white/8 bg-zinc-950 p-4"
+                                >
+                                  <div className="flex flex-wrap items-center justify-between gap-3">
+                                    <div className="text-sm text-zinc-400">
+                                      {isZh ? "任务状态" : "Task Status"}
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <div className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-zinc-200">
+                                        {formatVideoTaskStatus(task.status)}
+                                      </div>
+                                      <button
+                                        onClick={() => handleRefreshVideoTask(task)}
+                                        disabled={videoActionLoadingId === `refresh-${task.providerTaskId}`}
+                                        className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-xs text-zinc-200 disabled:opacity-50"
+                                      >
+                                        {videoActionLoadingId === `refresh-${task.providerTaskId}`
+                                          ? isZh
+                                            ? "刷新中..."
+                                            : "Refreshing..."
+                                          : isZh
+                                          ? "刷新状态"
+                                          : "Refresh Status"}
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  <div className="mt-4 text-sm leading-7 text-zinc-300">
+                                    {task.promptText}
+                                  </div>
+
+                                  <div className="mt-4 grid gap-3 md:grid-cols-3">
+                                    <div className="rounded-xl border border-white/8 bg-black/30 p-3 text-xs text-zinc-300">
+                                      {isZh ? "模型" : "Model"}：{task.model}
+                                    </div>
+                                    <div className="rounded-xl border border-white/8 bg-black/30 p-3 text-xs text-zinc-300">
+                                      {isZh ? "比例" : "Ratio"}：{task.ratio}
+                                    </div>
+                                    <div className="rounded-xl border border-white/8 bg-black/30 p-3 text-xs text-zinc-300">
+                                      {isZh ? "时长" : "Duration"}：{task.duration}s
+                                    </div>
+                                  </div>
+
+                                  {task.videoUrl ? (
+                                    <div className="mt-4 overflow-hidden rounded-xl border border-white/8 bg-black/30 p-3">
+                                      <video
+                                        src={task.videoUrl}
+                                        controls
+                                        className="w-full rounded-lg"
+                                      />
+                                    </div>
+                                  ) : null}
+
+                                  {task.errorMessage ? (
+                                    <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-xs text-red-300">
+                                      {task.errorMessage}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              ))
+                            ) : (
+                              <div className="rounded-[20px] border border-white/8 bg-zinc-950 p-4 text-sm leading-7 text-zinc-400">
+                                {isZh
+                                  ? "这个镜头还没有视频任务。点击右上角按钮即可基于这张图创建图生视频任务。"
+                                  : "This shot has no video task yet. Click the button above to create an image-to-video task from this image."}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               ) : (
-                <div className="space-y-6">
-                  {shotImages.map((item) => (
-                    <div
-                      key={`${item.shot}-${item.title}`}
-                      className="rounded-[24px] border border-white/8 bg-black/25 p-5"
-                    >
-                      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                        <div>
-                          <div className="inline-flex rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-xs text-cyan-300">
-                            {isZh ? `镜头 ${item.shot}` : `Shot ${item.shot}`}
-                          </div>
-                          <div className="mt-3 text-xl font-semibold text-white">{item.title}</div>
-                        </div>
-
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            onClick={() => copyPromptText(item.promptUsed)}
-                            className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-xs text-zinc-200"
-                          >
-                            {isZh ? "复制所用 Prompt" : "Copy Used Prompt"}
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">
-                        <div className="overflow-hidden rounded-[20px] border border-white/8 bg-zinc-950">
-                          <img
-                            src={item.imageUrl}
-                            alt={item.title}
-                            className="h-full w-full object-cover"
-                          />
-                        </div>
-
-                        <div className="rounded-[20px] border border-white/8 bg-zinc-950 p-4">
-                          <div className="text-sm font-medium text-cyan-300">
-                            {isZh ? "本次出图使用的英文 Prompt" : "Prompt used for generation"}
-                          </div>
-                          <div className="mt-3 whitespace-pre-wrap text-sm leading-7 text-zinc-200">
-                            {item.promptUsed}
-                          </div>
-
-                          {item.revisedPrompt ? (
-                            <>
-                              <div className="mt-5 text-sm font-medium text-cyan-300">
-                                {isZh ? "模型修订后的 Prompt" : "Revised Prompt"}
-                              </div>
-                              <div className="mt-3 whitespace-pre-wrap text-sm leading-7 text-zinc-300">
-                                {item.revisedPrompt}
-                              </div>
-                            </>
-                          ) : null}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                <div className="rounded-[24px] border border-white/8 bg-black/25 p-5 text-zinc-400">
+                  {isZh ? "还没有镜头图片，暂时不能发起图生视频任务。" : "No shot images yet, so image-to-video tasks cannot be started."}
                 </div>
               )}
             </div>
@@ -1233,57 +1222,13 @@ export default function ResultPage() {
 
           <section className="mx-auto max-w-7xl px-6 py-12">
             <div className="rounded-[32px] border border-white/10 bg-gradient-to-b from-zinc-900 to-zinc-950 p-7">
-              <div className="mb-5 flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-sm font-medium text-emerald-300">
-                    {isZh ? "原始剧本" : "Original Script"}
-                  </div>
-                  <div className="mt-2 text-3xl font-bold text-white">
-                    {isZh ? "本次生成使用的剧本内容" : "Script content used for this job"}
-                  </div>
-                </div>
+              <div className="mb-5 text-3xl font-bold text-white">
+                {isZh ? "原始剧本" : "Original Script"}
               </div>
 
               <pre className="overflow-auto rounded-[24px] border border-white/8 bg-black/25 p-5 whitespace-pre-wrap text-sm leading-7 text-zinc-300">
                 {payload.script || (isZh ? "暂无剧本内容" : "No script content")}
               </pre>
-            </div>
-          </section>
-
-          <section className="mx-auto max-w-7xl px-6 py-20">
-            <div className="relative overflow-hidden rounded-[36px] border border-emerald-400/20 bg-gradient-to-br from-emerald-400/15 via-emerald-400/10 to-cyan-400/10 p-10 text-center shadow-[0_20px_80px_rgba(16,185,129,0.08)]">
-              <div className="absolute left-0 top-0 h-40 w-40 rounded-full bg-emerald-400/10 blur-3xl" />
-              <div className="absolute bottom-0 right-0 h-40 w-40 rounded-full bg-cyan-400/10 blur-3xl" />
-
-              <div className="relative text-sm font-medium text-emerald-200">
-                {isZh ? "继续创作" : "Continue Creating"}
-              </div>
-
-              <h2 className="relative mt-3 text-4xl font-bold leading-tight text-white md:text-5xl">
-                {isZh ? "继续创建新的任务，让内容生产持续推进" : "Create new jobs and keep your workflow moving"}
-              </h2>
-
-              <p className="relative mx-auto mt-4 max-w-3xl text-base leading-8 text-zinc-200">
-                {isZh
-                  ? "你现在已经能把剧本解析成结构化结果、生成出图 Prompt，并直接得到镜头图片。下一步就可以继续接视频生成。"
-                  : "You can now turn scripts into structured results, generate image prompts, and directly create shot images. The next step is video generation."}
-              </p>
-
-              <div className="relative mt-8 flex flex-wrap items-center justify-center gap-4">
-                <Link
-                  href={`/${locale}/jobs`}
-                  className="rounded-2xl bg-black px-6 py-3 text-sm font-semibold text-white transition hover:bg-zinc-800"
-                >
-                  {isZh ? "返回任务中心" : "Back to Jobs"}
-                </Link>
-
-                <Link
-                  href={`/${locale}/generate`}
-                  className="rounded-2xl border border-white/20 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/[0.05]"
-                >
-                  {isZh ? "继续生成" : "Generate Again"}
-                </Link>
-              </div>
             </div>
           </section>
         </>

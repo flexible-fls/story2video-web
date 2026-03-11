@@ -5,9 +5,16 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import LanguageSwitch from "@/components/LanguageSwitch";
 import { supabase } from "@/lib/supabase";
-import mammoth from "mammoth";
-import * as pdfjsLib from "pdfjs-dist";
 import { PRICING_PLANS, formatPlanPriceCny } from "@/lib/pricing";
+import {
+  clearDraftScript,
+  loadDraftScript,
+  saveDraftScript,
+} from "@/lib/script-draft";
+import {
+  extractScriptTextFromFile,
+  getScriptStats,
+} from "@/lib/script-parser";
 
 type ProfileRow = {
   id: string;
@@ -17,25 +24,6 @@ type ProfileRow = {
   used_count: number;
   status: string;
 };
-
-const DRAFT_SCRIPT_TEXT_KEY = "draft_script_text";
-const DRAFT_SCRIPT_NAME_KEY = "draft_script_name";
-
-function saveDraftScript(text: string, fileName?: string) {
-  localStorage.setItem(DRAFT_SCRIPT_TEXT_KEY, text);
-  if (fileName) {
-    localStorage.setItem(DRAFT_SCRIPT_NAME_KEY, fileName);
-  } else {
-    localStorage.removeItem(DRAFT_SCRIPT_NAME_KEY);
-  }
-}
-
-function loadDraftScript() {
-  return {
-    text: localStorage.getItem(DRAFT_SCRIPT_TEXT_KEY) || "",
-    fileName: localStorage.getItem(DRAFT_SCRIPT_NAME_KEY) || "",
-  };
-}
 
 function getExampleScript(isZh: boolean) {
   return isZh
@@ -70,71 +58,6 @@ Scene 2: Flashback
 Narrator: Three years ago, he left when she needed him most.
 Gu Chen: If I had stayed, you would have been dragged into it.
 Lin Wan: But you never asked whether I wanted to face it with you.`;
-}
-
-function getScriptStats(text: string) {
-  const trimmed = text.trim();
-  return {
-    charCount: trimmed.length,
-    lineCount: trimmed ? trimmed.split("\n").length : 0,
-  };
-}
-
-async function extractTextFromTxtOrMd(file: File) {
-  return await file.text();
-}
-
-async function extractTextFromDocx(file: File) {
-  const arrayBuffer = await file.arrayBuffer();
-  const result = await mammoth.extractRawText({ arrayBuffer });
-  return result.value || "";
-}
-
-async function extractTextFromPdf(file: File) {
-  const arrayBuffer = await file.arrayBuffer();
-
-  pdfjsLib.GlobalWorkerOptions.workerSrc =
-    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.8.69/pdf.worker.min.mjs";
-
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-  let fullText = "";
-
-  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum += 1) {
-    const page = await pdf.getPage(pageNum);
-    const content = await page.getTextContent();
-    const pageText = content.items
-      .map((item: any) => ("str" in item ? item.str : ""))
-      .join(" ");
-    fullText += pageText + "\n";
-  }
-
-  return fullText.trim();
-}
-
-async function extractScriptTextFromFile(file: File, isZh: boolean) {
-  const lowerName = file.name.toLowerCase();
-
-  if (
-    lowerName.endsWith(".txt") ||
-    lowerName.endsWith(".md") ||
-    lowerName.endsWith(".text")
-  ) {
-    return await extractTextFromTxtOrMd(file);
-  }
-
-  if (lowerName.endsWith(".docx")) {
-    return await extractTextFromDocx(file);
-  }
-
-  if (lowerName.endsWith(".pdf")) {
-    return await extractTextFromPdf(file);
-  }
-
-  throw new Error(
-    isZh
-      ? "当前支持的剧本格式为：txt、md、text、docx、pdf"
-      : "Supported script formats: txt, md, text, docx, pdf"
-  );
 }
 
 export default function HomePage() {
@@ -325,7 +248,13 @@ export default function HomePage() {
                   disabled={signingOut}
                   className="rounded-full border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm text-red-300 transition hover:bg-red-500/15 disabled:opacity-50"
                 >
-                  {signingOut ? (isZh ? "退出中..." : "Signing out...") : isZh ? "退出登录" : "Sign Out"}
+                  {signingOut
+                    ? isZh
+                      ? "退出中..."
+                      : "Signing out..."
+                    : isZh
+                    ? "退出登录"
+                    : "Sign Out"}
                 </button>
               </>
             ) : (
@@ -480,8 +409,7 @@ export default function HomePage() {
                         setScriptText("");
                         setLoadedFileName("");
                         setErrorMessage("");
-                        localStorage.removeItem(DRAFT_SCRIPT_TEXT_KEY);
-                        localStorage.removeItem(DRAFT_SCRIPT_NAME_KEY);
+                        clearDraftScript();
                       }}
                       className="rounded-2xl border border-white/10 px-5 py-3 text-sm text-zinc-200 transition hover:bg-white/[0.05]"
                     >
@@ -687,11 +615,6 @@ export default function HomePage() {
           <h2 className="mt-4 text-4xl font-bold text-white md:text-5xl">
             {isZh ? "选择适合你的内容生产方案" : "Choose the plan that fits your workflow"}
           </h2>
-          <p className="mt-4 max-w-3xl text-base leading-8 text-zinc-300">
-            {isZh
-              ? "首页与 billing 页面现在使用同一份套餐配置，价格、额度和文案会保持一致。"
-              : "The homepage and billing page now use the same pricing source, so plan prices, quotas, and copy stay consistent."}
-          </p>
         </div>
 
         <div className="grid gap-6 xl:grid-cols-3">
