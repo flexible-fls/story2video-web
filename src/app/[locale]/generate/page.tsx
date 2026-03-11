@@ -5,8 +5,10 @@ import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import LanguageSwitch from "@/components/LanguageSwitch";
 import BackButton from "@/components/BackButton";
-import { PRICING_PLANS, getPlanByKey, formatPlanPriceCny } from "@/lib/pricing";
 import Link from "next/link";
+
+// 假设 PricingPlan 是一个组件或文件，你需要确保导入路径正确
+import PricingPlan from "@/components/PricingPlan"; // 请确认路径是否正确
 
 export default function GeneratePage() {
   const pathname = usePathname();
@@ -114,8 +116,8 @@ export default function GeneratePage() {
                   <div className="mt-3 text-sm text-zinc-400">
                     {isZh ? "功能描述：" : "Features: "}
                     <ul>
-                      {planDetails.features.map((feature) => (
-                        <li key={feature} className="text-zinc-300 text-sm">
+                      {planDetails.features?.map((feature, index) => (
+                        <li key={index} className="text-zinc-300 text-sm">
                           - {feature}
                         </li>
                       ))}
